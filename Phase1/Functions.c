@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include <math.h>
 #include <dirent.h>
+#include <ctype.h>
 
 enum FINDMASK
 {
@@ -14,10 +15,91 @@ enum FINDMASK
     ALL = 1 << 0
 };
 
+enum COMMAND
+{
+    CREATEFILE,
+    INSERTSTR,
+    CAT,
+    REMOVESTR,
+    COPYSTR,
+    CUTSTR,
+    PASTESTR,
+    FIND,
+    REPLACE,
+    GREP,
+    UNDO,
+    AUTOINDENT,
+    COMPARE,
+    TREE,
+    INVALID
+};
+
+char *COMSTR[] = {
+    "createfile",
+    "insertstr",
+    "cat",
+    "removestr",
+    "copystr",
+    "cutstr",
+    "pastestr",
+    "find",
+    "replace",
+    "grep",
+    "undo",
+    "auto-indent",
+    "compare",
+    "tree"};
+
+enum COMMAND ixtocom[] = {
+    CREATEFILE,
+    INSERTSTR,
+    CAT,
+    REMOVESTR,
+    COPYSTR,
+    CUTSTR,
+    PASTESTR,
+    FIND,
+    REPLACE,
+    GREP,
+    UNDO,
+    AUTOINDENT,
+    COMPARE,
+    TREE,
+    INVALID};
+
 char parentDir[512];
 char clipboardPath[512];
 char clipboardPathCat[512];
 FILE *CLIPBOARD;
+
+/// @brief Checks wether a string is a number
+/// @param str string
+/// @return 1 if is number
+int _isnum(char *str)
+{
+    for (int i = 0; str[i] != '\0'; i++)
+    {
+        if (!isdigit(str[i]))
+        {
+            return 0;
+        }
+    }
+
+    return 1;
+}
+
+/// @brief Converts a POSITIVE string to int
+/// @param str string
+/// @return number
+int _tonum(char *str)
+{
+    int out = 0;
+    for (int i = 0; str[i] != '\0'; i++)
+    {
+        out = out * 10 + (str[i] - '0');
+    }
+    return out;
+}
 
 /// @brief Converts int to string
 /// @param a number
@@ -160,7 +242,7 @@ int __isEmpty(FILE *file)
         return 1;
     }
     ungetc(c, file);
-    
+
     return 0;
 }
 
@@ -299,7 +381,6 @@ void __originFileLen(char *__file_path, int *characters, int *lines, int *words)
 
     remove(newPath);
 }
-
 
 /// @brief Gets number of lines, words and characters in the file
 /// @param __file_path file name
@@ -2352,7 +2433,7 @@ char *__cmpLine(char *this, char *that)
 /// @param this first file
 /// @param that second file
 /// @param this_path first path
-/// @param that_path second path 
+/// @param that_path second path
 /// @return result
 char *__cmpFile(FILE *this, FILE *that, char *this_path, char *that_path)
 {
@@ -2363,7 +2444,7 @@ char *__cmpFile(FILE *this, FILE *that, char *this_path, char *that_path)
     int _lthis = 0, _wthis, _cthis,
         _lthat = 0, _wthat, _cthat;
 
-    //test this
+    // test this
     chdir(parentDir);
     __originFileLen(this_path, &_cthis, &_lthis, &_wthis);
     chdir(parentDir);
@@ -2425,7 +2506,7 @@ char *__cmpFile(FILE *this, FILE *that, char *this_path, char *that_path)
             }
         }
     }
-    
+
     return out;
 }
 
@@ -2562,7 +2643,7 @@ char *compareFiles(char *this_path, char *that_path)
 /// @brief Checks if a path is file or directory
 /// @param path path
 /// @return 1 if is file
-int __isFile(const char* path)
+int __isFile(const char *path)
 {
     struct stat ps;
     stat(path, &ps);
@@ -2573,33 +2654,34 @@ int __isFile(const char* path)
 /// @param depth current depth of tree
 /// @param out output string
 /// @param precspace preceding space
-void __tree(int depth, char* out, int precspace)
+void __tree(int depth, char *out, int precspace)
 {
-    if(depth == 0)
+    if (depth == 0)
         return;
-    
+
     struct dirent *de;
     DIR *dr = opendir(".");
 
-    if(dr == NULL)
+    if (dr == NULL)
     {
         return;
     }
 
-    while((de = readdir(dr)) != NULL)
+    while ((de = readdir(dr)) != NULL)
     {
 
-        if((de->d_name)[0] == '.')
+        if ((de->d_name)[0] == '.')
             continue;
-        
-        for(int k = 0; k < precspace; k++)
+
+        for (int k = 0; k < precspace; k++)
             strcat(out, " ");
 
         strcat(out, "|--> ");
         strcat(out, de->d_name);
         strcat(out, "\n");
 
-        if(!__isFile(de->d_name)){
+        if (!__isFile(de->d_name))
+        {
             chdir(de->d_name);
 
             __tree(depth - 1, out, precspace + 5);
@@ -2614,27 +2696,598 @@ void __tree(int depth, char* out, int precspace)
 /// @return output string
 char *tree(int depth)
 {
-    char* out = calloc(10000, sizeof(char));
-    
+    char *out = calloc(10000, sizeof(char));
+
     chdir("root");
 
     strcat(out, "root\n");
 
     __tree(depth, out, 0);
 
-
     chdir(parentDir);
     return out;
+}
+
+/// @brief Handles input from user (doesn't handle arman)
+/// @param inp input command
+void handler(char *inp)
+{
+    char arg[128][32768];
+    int argc = 0;
+    int lenc = strlen(inp);
+
+    char currarg[32768];
+    int inQuote = 0;
+    int currarglen = 0;
+
+    for (int i = 0; i < lenc; i++)
+    {
+        if (inp[i] == ' ')
+        {
+            if (inQuote)
+            {
+                strncat(currarg, inp + i, 1);
+                currarglen++;
+            }
+            else
+            {
+                strcpy(arg[argc], currarg);
+                argc++;
+                if (argc >= 128)
+                {
+                    printf("ERROR: Invalid number of arguments.");
+                    return;
+                }
+                currarglen = 0;
+                currarg[0] = '\0';
+            }
+        }
+        else if (inp[i] == '"')
+        {
+            int isrealquote = (i != 0 && inp[i - 1] != '\\');
+
+            if (isrealquote)
+            {
+                inQuote = !inQuote;
+            }
+            else
+            {
+                strncat(currarg, inp + i, 1);
+                currarglen++;
+            }
+        }
+        else if (inp[i] == '\\')
+        {
+            if (i != lenc - 1)
+            {
+                if (inp[i + 1] == '\\')
+                {
+                    strncat(currarg, inp + i, 1);
+                    currarglen++;
+                    i++;
+                    continue;
+                }
+                else
+                {
+                    if (inp[i + 1] == 'n')
+                    {
+                        strcat(currarg, "\n");
+                        currarglen++;
+                    }
+                    else if (inp[i + 1] == 't')
+                    {
+                        strcat(currarg, "\t");
+                        currarglen++;
+                    }
+                    else if (inp[i + 1] == 'v')
+                    {
+                        strcat(currarg, "\v");
+                        currarglen++;
+                    }
+                    else if (inp[i + 1] != '"')
+                    {
+                        printf("ERROR: Invalid or unsupported escape character.");
+                        return;
+                    }
+                }
+            }
+            else
+            {
+                strncat(currarg, inp + i, 1);
+                currarglen++;
+            }
+        }
+        else
+        {
+            strncat(currarg, inp + i, 1);
+            currarglen++;
+        }
+
+        if (currarglen >= 32768)
+        {
+            printf("ERROR: Argument size exceeded (32768 characters)");
+            return;
+        }
+    }
+
+    if (currarglen)
+    {
+        strcpy(arg[argc], currarg);
+        argc++;
+        if (argc >= 128)
+        {
+            printf("ERROR: Invalid number of arguments.");
+            return;
+        }
+        currarg[0] = '\0';
+        currarglen = 0;
+    }
+
+    enum COMMAND com = INVALID;
+
+    for (int i = 0; i < 15; i++)
+    {
+        if (!strcmp(arg[0], COMSTR[i]))
+        {
+            com = ixtocom[i];
+            break;
+        }
+    }
+
+    switch (com)
+    {
+    case CREATEFILE:
+
+        if (argc != 3 || strcmp(arg[1], "--file"))
+        {
+            printf("Invalid command.");
+            return;
+        }
+
+        createFile(arg[2]);
+
+        break;
+
+    case INSERTSTR:
+
+        if (argc != 7 || strcmp(arg[1], "--file") || strcmp(arg[3], "--str") || strcmp(arg[5], "--pos"))
+        {
+            printf("Invalid command.");
+            return;
+        }
+
+        int lineno, startpos;
+
+        if (sscanf(arg[6], "%d:%d", &lineno, &startpos) != 2)
+        {
+            printf("Invalid command.");
+            return;
+        }
+
+        insertStr(arg[2], arg[4], lineno, startpos);
+
+        break;
+
+    case CAT:
+
+        if (argc != 3 || strcmp(arg[1], "--file"))
+        {
+            printf("Invalid command.");
+            return;
+        }
+
+        cat(arg[2]);
+
+        break;
+
+    case REMOVESTR:
+
+        if (argc != 8 || strcmp(arg[1], "--file") || strcmp(arg[3], "--pos") || strcmp(arg[5], "-size"))
+        {
+            printf("Invalid command.");
+            return;
+        }
+
+        int lineno, startpos, forward, cnt;
+
+        if (sscanf(arg[4], "%d:%d", &lineno, &startpos) != 2)
+        {
+            printf("Invalid command.");
+            return;
+        }
+
+        if (sscanf(arg[6], "%d", &cnt) != 1)
+        {
+            printf("Invalid command.");
+            return;
+        }
+
+        if (!strcmp(arg[7], "-b"))
+        {
+            forward = 0;
+        }
+        else if (!strcmp(arg[7], "-f"))
+        {
+            forward = 1;
+        }
+        else
+        {
+            printf("Invalid command.");
+            return;
+        }
+
+        removeStr(arg[2], lineno, startpos, cnt, forward);
+
+        break;
+
+    case COPYSTR:
+
+        if (argc != 8 || strcmp(arg[1], "--file") || strcmp(arg[3], "--pos") || strcmp(arg[5], "-size"))
+        {
+            printf("Invalid command.");
+            return;
+        }
+
+        int lineno, startpos, forward, cnt;
+
+        if (sscanf(arg[4], "%d:%d", &lineno, &startpos) != 2)
+        {
+            printf("Invalid command.");
+            return;
+        }
+
+        if (sscanf(arg[6], "%d", &cnt) != 1)
+        {
+            printf("Invalid command.");
+            return;
+        }
+
+        if (!strcmp(arg[7], "-b"))
+        {
+            forward = 0;
+        }
+        else if (!strcmp(arg[7], "-f"))
+        {
+            forward = 1;
+        }
+        else
+        {
+            printf("Invalid command.");
+            return;
+        }
+
+        copyStr(arg[2], lineno, startpos, cnt, forward);
+
+        break;
+
+    case CUTSTR:
+
+        if (argc != 8 || strcmp(arg[1], "--file") || strcmp(arg[3], "--pos") || strcmp(arg[5], "-size"))
+        {
+            printf("Invalid command.");
+            return;
+        }
+
+        int lineno, startpos, forward, cnt;
+
+        if (sscanf(arg[4], "%d:%d", &lineno, &startpos) != 2)
+        {
+            printf("Invalid command.");
+            return;
+        }
+
+        if (sscanf(arg[6], "%d", &cnt) != 1)
+        {
+            printf("Invalid command.");
+            return;
+        }
+
+        if (!strcmp(arg[7], "-b"))
+        {
+            forward = 0;
+        }
+        else if (!strcmp(arg[7], "-f"))
+        {
+            forward = 1;
+        }
+        else
+        {
+            printf("Invalid command.");
+            return;
+        }
+
+        cutStr(arg[2], lineno, startpos, cnt, forward);
+
+        break;
+
+    case PASTESTR:
+
+        if (argc != 5 || strcmp(arg[1], "--file") || strcmp(arg[3], "--pos"))
+        {
+            printf("Invalid command.");
+            return;
+        }
+
+        int lineno, startpos;
+
+        if (sscanf(arg[4], "%d:%d", &lineno, &startpos) != 2)
+        {
+            printf("Invalid command.");
+            return;
+        }
+
+        pasteStr(arg[2], lineno, startpos);
+
+        break;
+
+    case FIND:
+
+        if (argc >= 5) /*normal*/
+        {
+            if (strcmp(arg[1], "--str") || strcmp(arg[3], "--file"))
+            {
+                printf("Invalid command.");
+                return;
+            }
+
+            int byword = 0, at = 0, count = 0, all = 0, atnum = -1, otherargc = argc - 5;
+
+            for (int i = 5; i < argc; i++)
+            {
+                if (!strcmp(arg[i], "-byword"))
+                {
+                    byword++;
+                }
+                else if (!strcmp(arg[i], "-count"))
+                {
+                    count++;
+                }
+                else if (!strcmp(arg[i], "-all"))
+                {
+                    all++;
+                }
+                else if (!strcmp(arg[i], "-at"))
+                {
+                    at++;
+                }
+                else if (_isnum(arg[i]) && atnum != -1)
+                {
+                    atnum = _tonum(arg[i]);
+                }
+                else
+                {
+                    printf("Invalid command.");
+                    return;
+                }
+            }
+
+            if (byword > 1 || at > 1 || count > 1 || all > 1 || (at == 1 && atnum == -1))
+            {
+                printf("Invalid command.");
+                return;
+            }
+
+            int type = (byword ? BYWORD : 0) +
+                       (count ? COUNT : 0) +
+                       (all ? ALL : 0) +
+                       (at ? AT : 0);
+
+            printf("%s\n", find(arg[4], arg[2], type, atnum));
+        }
+        else
+        {
+            printf("Invalid command.");
+            return;
+        }
+
+        break;
+
+    case REPLACE:
+
+        if (argc >= 6) /*normal*/
+        {
+            if (strcmp(arg[1], "--str1") || strcmp(arg[3], "--str2") || strcmp(arg[5], "--file"))
+            {
+                printf("Invalid command.");
+                return;
+            }
+
+            if (argc == 6)
+            {
+                replace(arg[6], arg[2], arg[4], -2);
+            }
+            else if (argc == 7)
+            {
+                if (!strcmp(arg[6], "-all"))
+                {
+                    replace(arg[6], arg[2], arg[4], -1);
+                }
+                else
+                {
+                    printf("Invalid command.");
+                    return;
+                }
+            }
+            else if (argc == 8)
+            {
+                if (!strcmp(arg[6], "-at") && _isnum(arg[7]))
+                {
+                    replace(arg[6], arg[2], arg[4], _tonum(arg[7]));
+                }
+                else
+                {
+                    printf("Invalid command.");
+                    return;
+                }
+            }
+            else
+            {
+                printf("Invalid command.");
+                return;
+            }
+        }
+        else
+        {
+            printf("Invalid command.");
+            return;
+        }
+
+        break;
+
+    case GREP:
+
+        if (argc >= 5)
+        {
+            if (!strcat(arg[1], "--str"))
+            {
+                if (strcat(arg[3], "--files"))
+                {
+                    printf("Invalid command.");
+                    return;
+                }
+                else
+                {
+                    printf("%s\n", grep(arg + 4, argc - 4, arg[2], 'n'));
+                }
+            }
+            else if (!strcat(arg[1], "-c") || !strcat(arg[1], "-l"))
+            {
+                if (strcat(arg[4], "--files"))
+                {
+                    printf("Invalid command.");
+                    return;
+                }
+                else
+                {
+                    printf("%s\n", grep(arg + 5, argc - 5, arg[2], arg[1][1]));
+                }
+            }
+            else
+            {
+                printf("Invalid command.");
+                return;
+            }
+        }
+        else
+        {
+            printf("Invalid command.");
+            return;
+        }
+
+        break;
+
+    case UNDO:
+
+        if (argc != 3 || strcmp(arg[1], "--file"))
+        {
+            printf("Invalid command.");
+            return;
+        }
+
+        undo(arg[2]);
+
+        break;
+
+    case AUTOINDENT:
+        
+        if (argc != 2)
+        {
+            printf("Invalid command.");
+            return;
+        }
+
+        autoIndent(arg[1]);
+
+        break;
+
+    case COMPARE:
+        
+        if (argc != 3)
+        {
+            printf("Invalid command.");
+            return;
+        }
+
+        printf("%s\n", compareFiles(arg[1], arg[2]));
+
+        break;
+
+    case TREE:
+        
+        if (argc != 2)
+        {
+            printf("Invalid command.");
+            return;
+        }
+
+        printf("%s\n", _tonum(arg[1]));
+
+        break;
+
+    case INVALID:
+        /* code */
+        break;
+
+    default:
+        break;
+    }
+}
+
+void Handler(char *inp)
+{
+    int n = strlen(inp);
+
+    char first[32768 * 128];
+    char second[32768 * 128];
+    int inquote = 0;
+    int isarman = 0;
+
+    for (int i = 0; i < n - 4; i++)
+    {
+        if (inp[i] == '"')
+        {
+            int isrealquote = (i != 0 && inp[i - 1] != '\\');
+
+            if (isrealquote)
+            {
+                inquote = !inquote;
+            }
+        }
+
+        if (!inquote && inp[i] == ' ' && inp[i + 1] == '=' && inp[i + 2] == 'D' && inp[i + 3] == ' ')
+        {
+            strncpy(first, inp, i);
+            strncpy(second, inp + i + 4, n - i - 4);
+            isarman = 1;
+            break;
+        }
+    }
+
+    if (isarman)
+    {
+        // handle first and second
+    }
+    else
+    {
+        // handle inp
+    }
 }
 
 int main()
 {
     init();
+    char s[32768 * 20];
+    int len = 0;
 
-    char *s1 = "/root/bruh/wtf/this/is/a/test/myfile2.txt";
-    char *s2 = "/root/bruh/wtf/this/is/a/test/myfile1.txt";
+    gets(s);
+    printf("%s", s);
 
-    printf("%s", tree(-1));
+    handler(s);
+
+    // char *s1 = "/root/bruh/wtf/this/is/a/test/myfile2.txt";
+    // char *s2 = "/root/bruh/wtf/this/is/a/test/myfile1.txt";
+
+    // printf("%s", tree(-1));
 
     // cat(s);
     // autoIndent(s);
@@ -2676,13 +3329,13 @@ int main()
 
 /*
 
-hi this is a test 
-wtf 
+hi this is a test
+wtf
 12 123
-123 4125235 
+123 4125235
 124235 2402i3 2402i42
-owpjefs ffsk sld;ln l;msd;fln 
-dflm; 
+owpjefs ffsk sld;ln l;msd;fln
+dflm;
 
 
 */
