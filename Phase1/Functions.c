@@ -6,6 +6,8 @@
 #include <math.h>
 #include <dirent.h>
 #include <ctype.h>
+#include <limits.h>
+#include <stdint.h>
 
 enum FINDMASK
 {
@@ -69,8 +71,12 @@ enum COMMAND ixtocom[] = {
 
 char parentDir[512];
 char clipboardPath[512];
+char outputPath[512];
+char argsPath[512];
 char clipboardPathCat[512];
 FILE *CLIPBOARD;
+FILE *OUTPUT;
+int currargc;
 
 /// @brief Checks wether a string is a number
 /// @param str string
@@ -146,13 +152,80 @@ void __copy(FILE *source, FILE *dest)
         fputc(c, dest);
 }
 
+/// @brief Prints to output
+/// @param txt text to be written
+void _writeToOutput(const char *txt)
+{
+    char cwd[512];
+    getcwd(cwd, 512);
+
+    chdir(parentDir);
+
+    OUTPUT = fopen(outputPath, "a");
+    fprintf(OUTPUT, "%s", txt);
+
+    fclose(OUTPUT);
+
+    chdir(cwd);
+}
+
+/// @brief Clears output
+void _clearOutput()
+{
+    char cwd[512];
+    getcwd(cwd, 512);
+
+    chdir(parentDir);
+
+    OUTPUT = fopen(outputPath, "w");
+    fclose(OUTPUT);
+
+    chdir(cwd);
+}
+
+/// @brief Shows output in stdout
+void _showOutput()
+{
+    char cwd[512];
+    getcwd(cwd, 512);
+
+    chdir(parentDir);
+
+    OUTPUT = fopen(outputPath, "r");
+
+    char c = fgetc(OUTPUT);
+    while (c != EOF)
+    {
+        printf("%c", c);
+        c = fgetc(OUTPUT);
+    }
+
+    fclose(OUTPUT);
+
+    chdir(cwd);
+}
+
+/// @brief Copy-path of a file
+/// @param filename file
+/// @return copy-path
+char *__copyPath(char *filename)
+{
+    char *out = malloc((strlen(filename) + 5) * sizeof(char));
+
+    strcpy(out, filename);
+    strcat(out, "copy");
+
+    return out;
+}
+
 /// @brief Undo-path of a file
 /// @param filename file
 /// @return undo-path
 char *__undoPath(char *filename)
 {
     char *out = malloc((strlen(filename) + 5) * sizeof(char));
-    strcat(out, filename);
+
+    strcpy(out, filename);
     strcat(out, "undo");
 
     return out;
@@ -173,7 +246,8 @@ void __update(char *__file_path)
 
     if (i == -1 || !foundDot)
     {
-        printf("ERROR: Invalid file name.");
+        _writeToOutput("ERROR: Invalid file name\n");
+        free(path);
         chdir(parentDir);
         return;
     }
@@ -196,7 +270,7 @@ void __update(char *__file_path)
     {
         if (isFirst && strcmp(tok, "root"))
         {
-            printf("ERROR: File should be in root folder.\n");
+            _writeToOutput("ERROR: File should be in root folder\n");
             chdir(parentDir);
             return;
         }
@@ -205,7 +279,7 @@ void __update(char *__file_path)
 
         if (chdir(tok))
         {
-            printf("Invalid directory.");
+            _writeToOutput("Invalid directory.");
             chdir(parentDir);
             return;
         }
@@ -215,7 +289,10 @@ void __update(char *__file_path)
 
     if (!__fileExists(filename))
     {
-        printf("ERROR: File %s does not exist.", path);
+        _writeToOutput("ERROR: File : ");
+        _writeToOutput(path);
+        _writeToOutput(" does not exist\n");
+        free(path);
         chdir(parentDir);
         return;
     }
@@ -264,6 +341,250 @@ void init()
     CLIPBOARD = fopen("clipboard.clp", "w");
     fclose(CLIPBOARD);
 
+    chdir("..");
+    _mkdir(".output");
+    chdir(".output");
+    getcwd(outputPath, 512);
+    strcat(outputPath, "\\out.out");
+    OUTPUT = fopen("out.out", "w");
+    fclose(OUTPUT);
+
+    chdir("..");
+    _mkdir(".args");
+    chdir(".args");
+    getcwd(argsPath, 512);
+    currargc = 0;
+
+    chdir(parentDir);
+}
+
+/// @brief Generates path of an arg
+/// @param i arg index
+/// @return path
+char *_argpath(int i)
+{
+    char *out = malloc(512 * sizeof(char));
+    strcpy(out, argsPath);
+    strcat(out, "\\");
+    strcat(out, __itoa(i));
+    strcat(out, ".arg");
+
+    return out;
+}
+
+/// @brief makes a new arg
+void _addArg(char *txt)
+{
+    chdir(argsPath);
+
+    FILE *fp = fopen(_argpath(currargc++), "w+");
+
+    fputs(txt, fp);
+
+    fclose(fp);
+    chdir(parentDir);
+}
+
+/// @brief Empties the args folder
+void _deleteArgs()
+{
+    while (currargc--)
+    {
+        remove(_argpath(currargc));
+    }
+
+    currargc = 0;
+}
+
+/// @brief Compares two files
+/// @param thisfile first file
+/// @param thatfile second file
+/// @return 1 if they're equal, 0 if not
+int _filesAreEqual(FILE *thisfile, FILE *thatfile)
+{
+    char thisc = fgetc(thisfile);
+    char thatc = fgetc(thatfile);
+
+    while (thisc != EOF && thatc != EOF)
+    {
+        if (thisc != thatc)
+        {
+            fseek(thisfile, 0, SEEK_SET);
+            fseek(thatfile, 0, SEEK_SET);
+
+            return 0;
+        }
+
+        thisc = fgetc(thisfile);
+        thatc = fgetc(thatfile);
+    }
+
+    fseek(thisfile, 0, SEEK_SET);
+    fseek(thatfile, 0, SEEK_SET);
+
+    return thisc == EOF && thatc == EOF;
+}
+
+/// @brief Makes a copy of the file
+/// @param __file_path the given file
+void _makeACopy(char *__file_path)
+{
+    char *path = malloc(512 * sizeof(char));
+    strcpy(path, __file_path);
+
+    int i, foundDot = 0;
+    for (i = strlen(path) - 1; path[i] != '/' && i > -1; i--)
+    {
+        foundDot |= (path[i] == '.');
+    }
+
+    if (i == -1 || !foundDot)
+    {
+        free(path);
+        chdir(parentDir);
+        return;
+    }
+
+    char *filename = malloc((strlen(path) - 1 - i) * sizeof(char));
+
+    int _dum_ = strlen(path);
+    for (int j = i + 1; j < _dum_; j++)
+    {
+        filename[j - i - 1] = path[j];
+    }
+
+    filename[strlen(path) - 1 - i] = '\0';
+    path[i] = '\0';
+
+    char *tok;
+    int isFirst = 1;
+
+    while ((tok = strtok(path, "/")) != NULL)
+    {
+        if (isFirst && strcmp(tok, "root"))
+        {
+            chdir(parentDir);
+            return;
+        }
+
+        isFirst = 0;
+
+        if (chdir(tok))
+        {
+            chdir(parentDir);
+            return;
+        }
+
+        path = NULL;
+    }
+
+    if (!__fileExists(filename))
+    {
+        free(path);
+        chdir(parentDir);
+        return;
+    }
+
+    FILE *fp = fopen(filename, "r");
+    FILE *nfp = fopen(__copyPath(filename), "w");
+
+    char _c = fgetc(fp);
+    while (_c != EOF)
+    {
+        fputc(_c, nfp);
+        _c = fgetc(fp);
+    }
+
+    fseek(fp, 0, SEEK_SET);
+    fseek(nfp, 0, SEEK_SET);
+
+    fclose(fp);
+    fclose(nfp);
+    chdir(parentDir);
+}
+
+/// @brief Pastes copied file into the given position
+/// @param __file_path file to be pasted in
+/// @param done should paste?
+void _pasteCopyInto(char *__file_path, int done)
+{
+    char *path = malloc(512 * sizeof(char));
+    strcpy(path, __file_path);
+
+    int i, foundDot = 0;
+    for (i = strlen(path) - 1; path[i] != '/' && i > -1; i--)
+    {
+        foundDot |= (path[i] == '.');
+    }
+
+    if (i == -1 || !foundDot)
+    {
+        free(path);
+        chdir(parentDir);
+        return;
+    }
+
+    char *filename = malloc((strlen(path) - 1 - i) * sizeof(char));
+
+    int _dum_ = strlen(path);
+    for (int j = i + 1; j < _dum_; j++)
+    {
+        filename[j - i - 1] = path[j];
+    }
+
+    filename[strlen(path) - 1 - i] = '\0';
+    path[i] = '\0';
+
+    char *tok;
+    int isFirst = 1;
+
+    while ((tok = strtok(path, "/")) != NULL)
+    {
+        if (isFirst && strcmp(tok, "root"))
+        {
+            free(path);
+            chdir(parentDir);
+            return;
+        }
+
+        isFirst = 0;
+
+        if (chdir(tok))
+        {
+            free(path);
+            chdir(parentDir);
+            return;
+        }
+
+        path = NULL;
+    }
+
+    if (!__fileExists(filename))
+    {
+        free(path);
+        chdir(parentDir);
+        return;
+    }
+
+    if (done)
+    {
+        FILE *nfp = fopen(__undoPath(filename), "w");
+        FILE *cfp = fopen(__copyPath(filename), "r");
+
+        char _c = fgetc(cfp);
+        while (_c != EOF)
+        {
+            fputc(_c, nfp);
+            _c = fgetc(cfp);
+        }
+
+        fclose(cfp);
+        fclose(nfp);
+
+        remove(__copyPath(filename));
+    }
+
+    free(path);
     chdir(parentDir);
 }
 
@@ -291,7 +612,8 @@ void __originFileLen(char *__file_path, int *characters, int *lines, int *words)
 
     if (i == -1 || !foundDot)
     {
-        printf("ERROR: Invalid file name.");
+        _writeToOutput("ERROR: Invalid file name\n\n");
+        free(path);
         chdir(parentDir);
         return;
     }
@@ -314,7 +636,7 @@ void __originFileLen(char *__file_path, int *characters, int *lines, int *words)
     {
         if (isFirst && strcmp(tok, "root"))
         {
-            printf("ERROR: File should be in root folder.\n");
+            _writeToOutput("ERROR: File should be in root folder\n");
             chdir(parentDir);
             return;
         }
@@ -323,7 +645,7 @@ void __originFileLen(char *__file_path, int *characters, int *lines, int *words)
 
         if (chdir(tok))
         {
-            printf("Invalid directory.");
+            _writeToOutput("Invalid directory.");
             chdir(parentDir);
             return;
         }
@@ -333,7 +655,10 @@ void __originFileLen(char *__file_path, int *characters, int *lines, int *words)
 
     if (!__fileExists(filename))
     {
-        printf("ERROR: File %s does not exist.", path);
+        _writeToOutput("ERROR: File ");
+        _writeToOutput(path);
+        _writeToOutput(" does not exist\n");
+        free(path);
         chdir(parentDir);
         return;
     }
@@ -507,22 +832,56 @@ int __index(char *__file_path, int row, int col)
 /// @return String
 char *__toString(FILE *f)
 {
-    char *buffer = NULL;
-    long length;
-
-    if (f)
+    if (f == NULL || fseek(f, 0, SEEK_END))
     {
-        fseek(f, 0, SEEK_END);
-        length = ftell(f);
-        fseek(f, 0, SEEK_SET);
-        buffer = malloc(length);
-        if (buffer)
-        {
-            fread(buffer, 1, length, f);
-        }
+        return NULL;
     }
 
+    long length = ftell(f);
+    rewind(f);
+    // Did ftell() fail?  Is the length too long?
+    if (length == -1 || (unsigned long)length >= SIZE_MAX)
+    {
+        return NULL;
+    }
+
+    // Convert from long to size_t
+    size_t ulength = (size_t)length;
+    char *buffer = malloc(ulength + 1);
+    size_t g = 0;
+
+    char c = fgetc(f);
+    while (c != EOF)
+    {
+        buffer[g++] = c;
+        c = fgetc(f);
+    }
+
+    rewind(f);
+
+    buffer[ulength] = '\0'; // Now buffer points to a string
+
     return buffer;
+}
+
+/// @brief Returns arg as string
+/// @param i arg index
+/// @return arg
+char *_getarg(int i)
+{
+    chdir(argsPath);
+    FILE *fp = fopen(_argpath(i), "r");
+
+    if (!fp)
+        return NULL;
+
+    char *f = malloc(32768 * sizeof(char));
+    f = __toString(fp);
+
+    fclose(fp);
+    chdir(parentDir);
+
+    return f;
 }
 
 /// @brief Matches two characters
@@ -669,7 +1028,8 @@ void createFile(char *__file_path)
 
     if (i == -1 || !foundDot)
     {
-        printf("ERROR: Invalid file name.");
+        _writeToOutput("ERROR: Invalid file name\n");
+        free(path);
         chdir(parentDir);
         return;
     }
@@ -692,7 +1052,7 @@ void createFile(char *__file_path)
     {
         if (isFirst && strcmp(tok, "root"))
         {
-            printf("ERROR: File should be created in root folder.\n");
+            _writeToOutput("ERROR: File should be created in root folder\n");
             chdir(parentDir);
             return;
         }
@@ -707,7 +1067,8 @@ void createFile(char *__file_path)
 
     if (__fileExists(filename))
     {
-        printf("ERROR: File already exists.");
+        _writeToOutput("ERROR: File already exists\n");
+        free(path);
         chdir(parentDir);
         return;
     }
@@ -716,12 +1077,12 @@ void createFile(char *__file_path)
 
     if (fp)
     {
-        printf("File created successfully.");
+        _writeToOutput("File created successfully\n");
         fclose(fp);
     }
     else
     {
-        printf("ERROR: Could not create file.");
+        _writeToOutput("ERROR: Could not create file\n");
     }
 
     chdir(parentDir);
@@ -732,7 +1093,8 @@ void createFile(char *__file_path)
 /// @param text text to be inserted
 /// @param row starting line (1 indexed)
 /// @param col starting column (0 indexed)
-void insertStr(char *__file_path, char *text, int row, int col)
+/// @return 1 if the file changed, 0 if not
+int insertStr(char *__file_path, char *text, int row, int col)
 {
     char *path = malloc(512 * sizeof(char));
     strcpy(path, __file_path);
@@ -745,9 +1107,9 @@ void insertStr(char *__file_path, char *text, int row, int col)
 
     if (i == -1 || !foundDot)
     {
-        printf("ERROR: Invalid file name.");
+        _writeToOutput("ERROR: Invalid file name\n");
         chdir(parentDir);
-        return;
+        return 0;
     }
 
     char *filename = malloc((strlen(path) - 1 - i) * sizeof(char));
@@ -768,18 +1130,18 @@ void insertStr(char *__file_path, char *text, int row, int col)
     {
         if (isFirst && strcmp(tok, "root"))
         {
-            printf("ERROR: File should be in root folder.\n");
+            _writeToOutput("ERROR: File should be in root folder\n");
             chdir(parentDir);
-            return;
+            return 0;
         }
 
         isFirst = 0;
 
         if (chdir(tok))
         {
-            printf("ERROR: Invalid directory.");
+            _writeToOutput("ERROR: Invalid directory\n");
             chdir(parentDir);
-            return;
+            return 0;
         }
 
         path = NULL;
@@ -787,9 +1149,11 @@ void insertStr(char *__file_path, char *text, int row, int col)
 
     if (!__fileExists(filename))
     {
-        printf("ERROR: File %s does not exist.", path);
+        _writeToOutput("ERROR: File : ");
+        _writeToOutput(path);
+        _writeToOutput(" does not exist\n");
         chdir(parentDir);
-        return;
+        return 0;
     }
 
     char newPath[512];
@@ -863,11 +1227,13 @@ void insertStr(char *__file_path, char *text, int row, int col)
 
     if (!found)
     {
-        printf("ERROR: Invalid position.\n");
+        _writeToOutput("ERROR: Invalid position\n");
+        return 0;
     }
 
     free(line);
     chdir(parentDir);
+    return 1;
 }
 
 /// @brief Shows the file
@@ -885,7 +1251,8 @@ void cat(char *__file_path)
 
     if (i == -1 || !foundDot)
     {
-        printf("ERROR: Invalid file name.");
+        _writeToOutput("ERROR: Invalid file name\n");
+        free(path);
         chdir(parentDir);
         return;
     }
@@ -908,7 +1275,7 @@ void cat(char *__file_path)
     {
         if (isFirst && strcmp(tok, "root"))
         {
-            printf("ERROR: File should be in root folder.\n");
+            _writeToOutput("ERROR: File should be in root folder\n");
             chdir(parentDir);
             return;
         }
@@ -917,7 +1284,7 @@ void cat(char *__file_path)
 
         if (chdir(tok))
         {
-            printf("Invalid directory.");
+            _writeToOutput("ERROR: Invalid directory\n");
             chdir(parentDir);
             return;
         }
@@ -927,7 +1294,10 @@ void cat(char *__file_path)
 
     if (!__fileExists(filename))
     {
-        printf("ERROR: File %s does not exist.", path);
+        _writeToOutput("ERROR: File ");
+        _writeToOutput(path);
+        _writeToOutput(" does not exist\n");
+        free(path);
         chdir(parentDir);
         return;
     }
@@ -939,16 +1309,20 @@ void cat(char *__file_path)
     char *line = NULL;
     size_t len = 0;
 
-    printf("     ============|%s|============\n\n", filename);
+    _writeToOutput("\t ============|");
+    _writeToOutput(filename);
+    _writeToOutput("|============\n\n");
 
     if (!__isEmpty(fp))
     {
         while (getline(&line, &len, fp) != -1)
         {
-            printf("%4d| %s", r++, line);
+            _writeToOutput(__itoa(r++));
+            _writeToOutput("\t| ");
+            _writeToOutput(line);
         }
     }
-    printf("\n     --------------------------------------\n");
+    _writeToOutput("\n\t --------------------------------------\n");
 
     fclose(fp);
     free(line);
@@ -961,7 +1335,8 @@ void cat(char *__file_path)
 /// @param col starting column (0 indexed)
 /// @param count number of characters to be removed
 /// @param forward if set to one, characters are removed one after the other
-void removeStr(char *__file_path, int row, int col, int count, int forward)
+/// @return 1 if changed, 0 if not
+int removeStr(char *__file_path, int row, int col, int count, int forward)
 {
     char *path = malloc(512 * sizeof(char));
     strcpy(path, __file_path);
@@ -976,9 +1351,9 @@ void removeStr(char *__file_path, int row, int col, int count, int forward)
 
     if (i == -1 || !foundDot)
     {
-        printf("ERROR: Invalid file name.");
+        _writeToOutput("ERROR: Invalid file name\n");
         chdir(parentDir);
-        return;
+        return 0;
     }
 
     char *filename = malloc((strlen(path) - 1 - i) * sizeof(char));
@@ -999,18 +1374,18 @@ void removeStr(char *__file_path, int row, int col, int count, int forward)
     {
         if (isFirst && strcmp(tok, "root"))
         {
-            printf("ERROR: File should be in root folder.\n");
+            _writeToOutput("ERROR: File should be in root folder\n");
             chdir(parentDir);
-            return;
+            return 0;
         }
 
         isFirst = 0;
 
         if (chdir(tok))
         {
-            printf("ERROR: Invalid directory.");
+            _writeToOutput("ERROR: Invalid directory\n");
             chdir(parentDir);
-            return;
+            return 0;
         }
 
         path = NULL;
@@ -1018,9 +1393,11 @@ void removeStr(char *__file_path, int row, int col, int count, int forward)
 
     if (!__fileExists(filename))
     {
-        printf("ERROR: File %s does not exist.", path);
+        _writeToOutput("ERROR: File : ");
+        _writeToOutput(path);
+        _writeToOutput(" does not exist\n");
         chdir(parentDir);
-        return;
+        return 0;
     }
 
     char newPath[512];
@@ -1054,24 +1431,24 @@ void removeStr(char *__file_path, int row, int col, int count, int forward)
 
     if (ix == -1)
     {
-        printf("ERROR: Invalid position.");
+        _writeToOutput("ERROR: Invalid position\n");
         fclose(fp);
         fclose(nfp);
         free(line);
         chdir(parentDir);
 
-        return;
+        return 0;
     }
 
     if (e_ix < 0 || e_ix >= chars)
     {
-        printf("ERROR: Invalid count.");
+        _writeToOutput("ERROR: Invalid count\n");
         fclose(fp);
         fclose(nfp);
         free(line);
         chdir(parentDir);
 
-        return;
+        return 0;
     }
 
     int s_ix = (e_ix < ix ? e_ix : ix),
@@ -1108,6 +1485,8 @@ void removeStr(char *__file_path, int row, int col, int count, int forward)
 
     free(line);
     chdir(parentDir);
+
+    return 1;
 }
 
 /// @brief Copies a certain number of characters to clipboard
@@ -1116,7 +1495,8 @@ void removeStr(char *__file_path, int row, int col, int count, int forward)
 /// @param col starting column (0 indexed)
 /// @param count number of characters to be copied
 /// @param forward if set to one, characters are copied one after the other
-void copyStr(char *__file_path, int row, int col, int count, int forward)
+/// @return 1 if changed, 0 if not
+int copyStr(char *__file_path, int row, int col, int count, int forward)
 {
     char *path = malloc(512 * sizeof(char));
     strcpy(path, __file_path);
@@ -1131,9 +1511,9 @@ void copyStr(char *__file_path, int row, int col, int count, int forward)
 
     if (i == -1 || !foundDot)
     {
-        printf("ERROR: Invalid file name.");
+        _writeToOutput("ERROR: Invalid file name\n");
         chdir(parentDir);
-        return;
+        return 0;
     }
 
     char *filename = malloc((strlen(path) - 1 - i) * sizeof(char));
@@ -1154,18 +1534,18 @@ void copyStr(char *__file_path, int row, int col, int count, int forward)
     {
         if (isFirst && strcmp(tok, "root"))
         {
-            printf("ERROR: File should be in root folder.\n");
+            _writeToOutput("ERROR: File should be in root folder\n");
             chdir(parentDir);
-            return;
+            return 0;
         }
 
         isFirst = 0;
 
         if (chdir(tok))
         {
-            printf("ERROR: Invalid directory.");
+            _writeToOutput("ERROR: Invalid directory\n");
             chdir(parentDir);
-            return;
+            return 0;
         }
 
         path = NULL;
@@ -1173,9 +1553,11 @@ void copyStr(char *__file_path, int row, int col, int count, int forward)
 
     if (!__fileExists(filename))
     {
-        printf("ERROR: File %s does not exist.", path);
+        _writeToOutput("ERROR: File : ");
+        _writeToOutput(path);
+        _writeToOutput(" does not exist\n");
         chdir(parentDir);
-        return;
+        return 0;
     }
 
     char newPath[512];
@@ -1214,26 +1596,26 @@ void copyStr(char *__file_path, int row, int col, int count, int forward)
 
     if (ix == -1)
     {
-        printf("ERROR: Invalid position.");
+        _writeToOutput("ERROR: Invalid position\n");
         fclose(fp);
         fclose(nfp);
         fclose(cfp);
         free(line);
         chdir(parentDir);
 
-        return;
+        return 0;
     }
 
     if (e_ix < 0 || e_ix >= chars)
     {
-        printf("ERROR: Invalid count.");
+        _writeToOutput("ERROR: Invalid count\n");
         fclose(fp);
         fclose(nfp);
         fclose(cfp);
         free(line);
         chdir(parentDir);
 
-        return;
+        return 0;
     }
 
     int s_ix = (e_ix < ix ? e_ix : ix),
@@ -1281,6 +1663,8 @@ void copyStr(char *__file_path, int row, int col, int count, int forward)
 
     free(line);
     chdir(parentDir);
+
+    return 1;
 }
 
 /// @brief Cuts a certain number of characters to clipboard
@@ -1289,7 +1673,8 @@ void copyStr(char *__file_path, int row, int col, int count, int forward)
 /// @param col starting column (0 indexed)
 /// @param count number of characters to be cut
 /// @param forward if set to one, characters are cut one after the other
-void cutStr(char *__file_path, int row, int col, int count, int forward)
+/// @return 1 if changed, 0 if not
+int cutStr(char *__file_path, int row, int col, int count, int forward)
 {
     char *path = malloc(512 * sizeof(char));
     strcpy(path, __file_path);
@@ -1304,9 +1689,9 @@ void cutStr(char *__file_path, int row, int col, int count, int forward)
 
     if (i == -1 || !foundDot)
     {
-        printf("ERROR: Invalid file name.");
+        _writeToOutput("ERROR: Invalid file name\n");
         chdir(parentDir);
-        return;
+        return 0;
     }
 
     char *filename = malloc((strlen(path) - 1 - i) * sizeof(char));
@@ -1327,18 +1712,18 @@ void cutStr(char *__file_path, int row, int col, int count, int forward)
     {
         if (isFirst && strcmp(tok, "root"))
         {
-            printf("ERROR: File should be in root folder.\n");
+            _writeToOutput("ERROR: File should be in root folder\n");
             chdir(parentDir);
-            return;
+            return 0;
         }
 
         isFirst = 0;
 
         if (chdir(tok))
         {
-            printf("ERROR: Invalid directory.");
+            _writeToOutput("ERROR: Invalid directory\n");
             chdir(parentDir);
-            return;
+            return 0;
         }
 
         path = NULL;
@@ -1346,9 +1731,11 @@ void cutStr(char *__file_path, int row, int col, int count, int forward)
 
     if (!__fileExists(filename))
     {
-        printf("ERROR: File %s does not exist.", path);
+        _writeToOutput("ERROR: File : ");
+        _writeToOutput(path);
+        _writeToOutput(" does not exist\n");
         chdir(parentDir);
-        return;
+        return 0;
     }
 
     char newPath[512];
@@ -1387,26 +1774,26 @@ void cutStr(char *__file_path, int row, int col, int count, int forward)
 
     if (ix == -1)
     {
-        printf("ERROR: Invalid position.");
+        _writeToOutput("ERROR: Invalid position\n");
         fclose(fp);
         fclose(nfp);
         fclose(cfp);
         free(line);
         chdir(parentDir);
 
-        return;
+        return 0;
     }
 
     if (e_ix < 0 || e_ix >= chars)
     {
-        printf("ERROR: Invalid count.");
+        _writeToOutput("ERROR: Invalid count\n");
         fclose(fp);
         fclose(nfp);
         fclose(cfp);
         free(line);
         chdir(parentDir);
 
-        return;
+        return 0;
     }
 
     int s_ix = (e_ix < ix ? e_ix : ix),
@@ -1457,13 +1844,16 @@ void cutStr(char *__file_path, int row, int col, int count, int forward)
 
     free(line);
     chdir(parentDir);
+
+    return 1;
 }
 
 /// @brief Pastes clipboard into the given position
 /// @param __file_path file name
 /// @param row starting line (1 indexed)
 /// @param col starting column (0 indexed)
-void pasteStr(char *__file_path, int row, int col)
+/// @return 1 if changed, 0 if not
+int pasteStr(char *__file_path, int row, int col)
 {
     char *path = malloc(512 * sizeof(char));
     strcpy(path, __file_path);
@@ -1471,9 +1861,11 @@ void pasteStr(char *__file_path, int row, int col)
     CLIPBOARD = fopen(clipboardPath, "rb");
     char *str = __toString(CLIPBOARD);
 
-    insertStr(path, str, row, col);
+    int out = insertStr(path, str, row, col);
     fclose(CLIPBOARD);
     free(str);
+
+    return out;
 }
 
 /// @brief Finds a pattern in the file
@@ -1481,8 +1873,8 @@ void pasteStr(char *__file_path, int row, int col)
 /// @param pat_ pattern to be matched
 /// @param f_type type of find (at|byword|count|all) e.g. 0110 means count byword
 /// @param at if f_type is 1XXX this parameter is at's argument
-/// @return Output string
-char *find(char *__file_path, char *pat_, int f_type, int at)
+/// @return 1 if successful, 0 if not
+int find(char *__file_path, char *pat_, int f_type, int at)
 {
     char *path = malloc(512 * sizeof(char));
     strcpy(path, __file_path);
@@ -1490,8 +1882,8 @@ char *find(char *__file_path, char *pat_, int f_type, int at)
     // Errors
     if ((f_type & (ALL & AT)) || (f_type & (ALL & COUNT)) || (f_type & (AT & COUNT)) || ((f_type & AT) && at < 0))
     {
-        printf("ERROR: wrong input.");
-        return "-1";
+        _writeToOutput("ERROR: wrong input\n");
+        return 0;
     }
 
     int i, foundDot = 0;
@@ -1502,9 +1894,9 @@ char *find(char *__file_path, char *pat_, int f_type, int at)
 
     if (i == -1 || !foundDot)
     {
-        printf("ERROR: Invalid file name.");
+        _writeToOutput("ERROR: Invalid file name\n");
         chdir(parentDir);
-        return "-1";
+        return 0;
     }
 
     char *filename = malloc((unsigned int)((int)strlen(path) - 1 - i) * sizeof(char));
@@ -1525,18 +1917,18 @@ char *find(char *__file_path, char *pat_, int f_type, int at)
     {
         if (isFirst && strcmp(tok, "root"))
         {
-            printf("ERROR: File should be in root folder.\n");
+            _writeToOutput("ERROR: File should be in root folder\n");
             chdir(parentDir);
-            return "-1";
+            return 0;
         }
 
         isFirst = 0;
 
         if (chdir(tok))
         {
-            printf("Invalid directory.");
+            _writeToOutput("ERROR: Invalid directory\n");
             chdir(parentDir);
-            return "-1";
+            return 0;
         }
 
         path = NULL;
@@ -1544,14 +1936,14 @@ char *find(char *__file_path, char *pat_, int f_type, int at)
 
     if (!__fileExists(filename))
     {
-        printf("ERROR: File %s does not exist.", path);
+        _writeToOutput("ERROR: File : ");
+        _writeToOutput(path);
+        _writeToOutput(" does not exist\n");
         chdir(parentDir);
-        return "-1";
+        return 0;
     }
 
     FILE *fp = fopen(filename, "r+");
-
-    char *out = calloc(1000, sizeof(out));
 
     char *str = __toString(fp);
 
@@ -1559,8 +1951,8 @@ char *find(char *__file_path, char *pat_, int f_type, int at)
     short *pat = __toPat(pat_, &pats);
     if ((pats == 1 && pat[0] == -1) || (pats == 2 && pat[0] == -1 && pat[1] == -1))
     {
-        printf("ERROR: Invalid regex.");
-        return "-1";
+        _writeToOutput("ERROR: Invalid regex\n");
+        return 0;
     }
 
     int cmatch[512];
@@ -1579,29 +1971,29 @@ char *find(char *__file_path, char *pat_, int f_type, int at)
 
     if (!matchno)
     {
-        strcat(out, "-1");
+        _writeToOutput("No matches\n");
         fclose(fp);
         chdir(parentDir);
-        return out;
+        return 0;
     }
 
     if (f_type & AT)
     {
         if (at >= matchno)
         {
-            strcat(out, "Not enough matches.");
+            _writeToOutput("Not enough matches\n");
             fclose(fp);
             chdir(parentDir);
-            return out;
+            return 0;
         }
     }
 
     if (f_type & COUNT)
     {
-        strcat(out, __itoa(matchno));
+        _writeToOutput(__itoa(matchno));
         fclose(fp);
         chdir(parentDir);
-        return out;
+        return 1;
     }
 
     if (f_type & BYWORD)
@@ -1613,35 +2005,31 @@ char *find(char *__file_path, char *pat_, int f_type, int at)
     {
         for (int ii = 0; ii < matchno; ii++)
         {
-            char *fsdfs = __itoa(cmatch[ii]);
-            strcat(out, fsdfs);
+            _writeToOutput(__itoa(cmatch[ii]));
             if (ii != matchno - 1)
             {
-                strcat(out, ", ");
+                _writeToOutput(", ");
             }
         }
 
         fclose(fp);
         chdir(parentDir);
-        return out;
+        return 1;
     }
 
     if (f_type & AT)
     {
-        strcat(out, __itoa(cmatch[at]));
+        _writeToOutput(__itoa(cmatch[at]));
         fclose(fp);
         chdir(parentDir);
-        return out;
+        return 1;
     }
 
-    if (matchno)
-        strcat(out, __itoa(cmatch[0]));
-    else
-        strcat(out, "-1");
+    _writeToOutput(__itoa(cmatch[0]));
 
     fclose(fp);
     chdir(parentDir);
-    return out;
+    return 1;
 }
 
 /// @brief Replaces string str with fill
@@ -1649,7 +2037,8 @@ char *find(char *__file_path, char *pat_, int f_type, int at)
 /// @param str pattern to be matched
 /// @param fill string to be filled
 /// @param at if set to n, replaces nth occurence, if set -1 replaces all
-void replace(char *__file_path, char *str, char *fill, int at)
+/// @return 1 if changed, 0 if not
+int replace(char *__file_path, char *str, char *fill, int at)
 {
     char *path = malloc(512 * sizeof(char));
     strcpy(path, __file_path);
@@ -1657,8 +2046,8 @@ void replace(char *__file_path, char *str, char *fill, int at)
     // Errors
     if (at < -1)
     {
-        printf("ERROR: wrong input.");
-        return;
+        _writeToOutput("ERROR: wrong input\n");
+        return 0;
     }
 
     int i, foundDot = 0;
@@ -1669,9 +2058,9 @@ void replace(char *__file_path, char *str, char *fill, int at)
 
     if (i == -1 || !foundDot)
     {
-        printf("ERROR: Invalid file name.");
+        _writeToOutput("ERROR: Invalid file name\n");
         chdir(parentDir);
-        return;
+        return 0;
     }
 
     char *filename = malloc((unsigned int)((int)strlen(path) - 1 - i) * sizeof(char));
@@ -1692,18 +2081,18 @@ void replace(char *__file_path, char *str, char *fill, int at)
     {
         if (isFirst && strcmp(tok, "root"))
         {
-            printf("ERROR: File should be in root folder.\n");
+            _writeToOutput("ERROR: File should be in root folder\n");
             chdir(parentDir);
-            return;
+            return 0;
         }
 
         isFirst = 0;
 
         if (chdir(tok))
         {
-            printf("Invalid directory.");
+            _writeToOutput("ERROR: Invalid directory\n");
             chdir(parentDir);
-            return;
+            return 0;
         }
 
         path = NULL;
@@ -1711,14 +2100,14 @@ void replace(char *__file_path, char *str, char *fill, int at)
 
     if (!__fileExists(filename))
     {
-        printf("ERROR: File %s does not exist.", path);
+        _writeToOutput("ERROR: File : ");
+        _writeToOutput(path);
+        _writeToOutput(" does not exist\n");
         chdir(parentDir);
-        return;
+        return 0;
     }
 
     FILE *fp = fopen(filename, "r+");
-
-    char *out = calloc(1000, sizeof(out));
 
     char *fstr = __toString(fp);
 
@@ -1726,8 +2115,11 @@ void replace(char *__file_path, char *str, char *fill, int at)
     short *pat = __toPat(str, &pats);
     if ((pats == 1 && pat[0] == -1) || (pats == 2 && pat[0] == -1 && pat[1] == -1))
     {
-        printf("ERROR: Invalid regex.");
-        return;
+        _writeToOutput("ERROR: Invalid regex\n");
+        fclose(fp);
+        free(fp);
+        chdir(parentDir);
+        return 0;
     }
 
     int cmatch[512];
@@ -1745,8 +2137,6 @@ void replace(char *__file_path, char *str, char *fill, int at)
         }
     }
 
-    printf("\n");
-
     fclose(fp);
 
     int purelen;
@@ -1754,8 +2144,10 @@ void replace(char *__file_path, char *str, char *fill, int at)
 
     if ((purelen == 1 && ppat[0] == -1) || (purelen == 2 && ppat[0] == -1 && ppat[1] == -1))
     {
-        printf("ERROR: Invalid regex.");
-        return;
+        _writeToOutput("ERROR: Invalid regex\n");
+        free(fp);
+        chdir(parentDir);
+        return 0;
     }
 
     purelen -= (ppat[0] == -1) + (ppat[purelen - 1] == -1);
@@ -1798,13 +2190,19 @@ void replace(char *__file_path, char *str, char *fill, int at)
 
         if (at >= matchno)
         {
-            printf("ERROR: Not enough matches.");
+            _writeToOutput("Not enough matches\n");
+            fclose(fp);
+            free(fp);
+            chdir(parentDir);
+            return 0;
         }
     }
 
     fclose(fp);
     free(fp);
     chdir(parentDir);
+
+    return 1;
 }
 
 /// @brief Find helper for grep
@@ -1824,7 +2222,7 @@ char *__specialFind(char *__file_path, char *pat_)
 
     if (i == -1 || !foundDot)
     {
-        printf("ERROR: Invalid file name.");
+        _writeToOutput("ERROR: Invalid file name\n");
         chdir(parentDir);
         return "-1";
     }
@@ -1847,7 +2245,7 @@ char *__specialFind(char *__file_path, char *pat_)
     {
         if (isFirst && strcmp(tok, "root"))
         {
-            printf("ERROR: File should be in root folder.\n");
+            _writeToOutput("ERROR: File should be in root folder\n");
             chdir(parentDir);
             return "-1";
         }
@@ -1856,7 +2254,7 @@ char *__specialFind(char *__file_path, char *pat_)
 
         if (chdir(tok))
         {
-            printf("Invalid directory.");
+            _writeToOutput("ERROR: Invalid directory\n");
             chdir(parentDir);
             return "-1";
         }
@@ -1866,7 +2264,9 @@ char *__specialFind(char *__file_path, char *pat_)
 
     if (!__fileExists(filename))
     {
-        printf("ERROR: File %s does not exist.", path);
+        _writeToOutput("ERROR: File : ");
+        _writeToOutput(path);
+        _writeToOutput(" does not exist\n");
         chdir(parentDir);
         return "-1";
     }
@@ -1881,7 +2281,7 @@ char *__specialFind(char *__file_path, char *pat_)
     short *pat = __toPat(pat_, &pats);
     if ((pats == 1 && pat[0] == -1) || (pats == 2 && pat[0] == -1 && pat[1] == -1))
     {
-        printf("ERROR: Invalid regex.");
+        _writeToOutput("ERROR: Invalid regex\n");
         return "-1";
     }
 
@@ -1944,20 +2344,17 @@ char *__specialFind(char *__file_path, char *pat_)
 /// @param s_files number of files
 /// @param str pattern to be matched
 /// @param option either c(only number of matches), l(only file names) or none
-/// @return output string
-char *grep(char **files, int s_files, char *str, char option)
+void grep(char **files, int s_files, char *str, char option)
 {
-    char *out = calloc(100000, sizeof(char));
-
     if (option == 'l')
     {
         for (int i = 0; i < s_files; i++)
         {
-            char *res = find(files[i], str, 0, 0);
-            if (strcmp(res, "-1"))
+            int res = find(files[i], str, 0, 0);
+            if (res)
             {
-                strcat(out, files[i]);
-                strcat(out, "\n");
+                _writeToOutput(files[i]);
+                _writeToOutput("\n");
             }
         }
     }
@@ -1966,13 +2363,13 @@ char *grep(char **files, int s_files, char *str, char option)
         int o = 0;
         for (int i = 0; i < s_files; i++)
         {
-            char *res = find(files[i], str, 0, 0);
-            if (strcmp(res, "-1"))
+            int res = find(files[i], str, 0, 0);
+            if (res)
             {
                 o++;
             }
         }
-        strcat(out, __itoa(o));
+        _writeToOutput(__itoa(o));
     }
     else
     {
@@ -1981,12 +2378,10 @@ char *grep(char **files, int s_files, char *str, char option)
             char *res = __specialFind(files[i], str);
             if (strcmp(res, "-1"))
             {
-                strcat(out, res);
+                _writeToOutput(res);
             }
         }
     }
-
-    return out;
 }
 
 /// @brief Undoes recent action (only once)
@@ -2004,7 +2399,8 @@ void undo(char *__file_path)
 
     if (i == -1 || !foundDot)
     {
-        printf("ERROR: Invalid file name.");
+        _writeToOutput("ERROR: Invalid file name\n");
+        free(path);
         chdir(parentDir);
         return;
     }
@@ -2027,7 +2423,7 @@ void undo(char *__file_path)
     {
         if (isFirst && strcmp(tok, "root"))
         {
-            printf("ERROR: File should be in root folder.\n");
+            _writeToOutput("ERROR: File should be in root folder\n");
             chdir(parentDir);
             return;
         }
@@ -2036,7 +2432,7 @@ void undo(char *__file_path)
 
         if (chdir(tok))
         {
-            printf("Invalid directory.");
+            _writeToOutput("ERROR: Invalid directory\n");
             chdir(parentDir);
             return;
         }
@@ -2046,28 +2442,42 @@ void undo(char *__file_path)
 
     if (!__fileExists(filename))
     {
-        printf("ERROR: File %s does not exist.", path);
+        _writeToOutput("ERROR: File : ");
+        _writeToOutput(path);
+        _writeToOutput(" does not exist\n");
+        free(path);
         chdir(parentDir);
         return;
     }
 
-    FILE *fp = fopen(filename, "r");
-    FILE *df = fopen("dummy.dum", "w");
+    FILE *fp = fopen(filename, "r+");
+    FILE *df = fopen("dummy.dum", "w+");
+    FILE *fu = fopen(__undoPath(filename), "r+");
+
     __copy(fp, df);
-    fclose(fp);
-    fclose(df);
 
+    fseek(fp, 0, SEEK_SET);
+    fseek(df, 0, SEEK_SET);
+
+    fclose(fp);
     fp = fopen(filename, "w");
-    FILE *fu = fopen(__undoPath(filename), "r");
-    __copy(fu, fp);
-    fclose(fp);
-    fclose(fu);
 
+    __copy(fu, fp);
+
+    fseek(fu, 0, SEEK_SET);
+    fseek(fp, 0, SEEK_SET);
+
+    fclose(fu);
     fu = fopen(__undoPath(filename), "w");
-    df = fopen("dummy.dum", "r");
+
     __copy(df, fu);
+
+    fseek(fu, 0, SEEK_SET);
+    fseek(df, 0, SEEK_SET);
+
     fclose(df);
     fclose(fu);
+    fclose(fp);
 
     remove("dummy.dum");
     chdir(parentDir);
@@ -2075,7 +2485,8 @@ void undo(char *__file_path)
 
 /// @brief Indents the given file
 /// @param __file_path file name
-void autoIndent(char *__file_path)
+/// @return 1 if chanegd, 0 if not
+int autoIndent(char *__file_path)
 {
     char *path = malloc(512 * sizeof(char));
     strcpy(path, __file_path);
@@ -2088,9 +2499,9 @@ void autoIndent(char *__file_path)
 
     if (i == -1 || !foundDot)
     {
-        printf("ERROR: Invalid file name.");
+        _writeToOutput("ERROR: Invalid file name\n");
         chdir(parentDir);
-        return;
+        return 0;
     }
 
     char *filename = malloc((strlen(path) - 1 - i) * sizeof(char));
@@ -2111,18 +2522,18 @@ void autoIndent(char *__file_path)
     {
         if (isFirst && strcmp(tok, "root"))
         {
-            printf("ERROR: File should be in root folder.\n");
+            _writeToOutput("ERROR: File should be in root folder\n");
             chdir(parentDir);
-            return;
+            return 0;
         }
 
         isFirst = 0;
 
         if (chdir(tok))
         {
-            printf("ERROR: Invalid directory.");
+            _writeToOutput("ERROR: Invalid directory\n");
             chdir(parentDir);
-            return;
+            return 0;
         }
 
         path = NULL;
@@ -2130,9 +2541,11 @@ void autoIndent(char *__file_path)
 
     if (!__fileExists(filename))
     {
-        printf("ERROR: File %s does not exist.", path);
+        _writeToOutput("ERROR: File : ");
+        _writeToOutput(path);
+        _writeToOutput(" does not exist\n");
         chdir(parentDir);
-        return;
+        return 0;
     }
 
     char newPath[512];
@@ -2274,6 +2687,8 @@ void autoIndent(char *__file_path)
 
     free(line);
     chdir(parentDir);
+
+    return 1;
 }
 
 /// @brief Compares two strings
@@ -2411,17 +2826,19 @@ char *__cmpLine(char *this, char *that)
         if (diff == 1)
         {
             strcat(out, outthisone);
-            out[strlen(out) - 2] = '\0';
+            out[strlen(out) - 1] = '\0';
             strcat(out, "\n");
             strcat(out, outthatone);
         }
         else
         {
             strcat(out, outthis);
-            out[strlen(out) - 2] = '\0';
+            out[strlen(out) - 1] = '\0';
             strcat(out, "\n");
             strcat(out, outthat);
         }
+
+        return out;
     }
     else
     {
@@ -2434,8 +2851,7 @@ char *__cmpLine(char *this, char *that)
 /// @param that second file
 /// @param this_path first path
 /// @param that_path second path
-/// @return result
-char *__cmpFile(FILE *this, FILE *that, char *this_path, char *that_path)
+void __cmpFile(FILE *this, FILE *that, char *this_path, char *that_path)
 {
     char *out = calloc(100000, sizeof(char));
 
@@ -2464,57 +2880,57 @@ char *__cmpFile(FILE *this, FILE *that, char *this_path, char *that_path)
             char *res = __cmpLine(linethis, linethat);
             if (strcmp(res, "-1"))
             {
-                strcat(out, "============ #");
-                strcat(out, __itoa(rthis));
-                strcat(out, " ============\n");
-                strcat(out, res);
-                strcat(out, "\n");
+                _writeToOutput("============ #");
+                _writeToOutput(__itoa(rthis));
+                _writeToOutput(" ============\n");
+                _writeToOutput(res);
+                _writeToOutput("\n");
             }
 
             rthis++;
             rthat++;
         }
 
-        if (rthis == _lthis && rthat < _lthat)
-        {
-            strcat(out, ">>>>>>>>>>>> #");
-            strcat(out, __itoa(rthat));
-            strcat(out, " - #");
-            strcat(out, __itoa(_lthat));
-            strcat(out, " <<<<<<<<<<<<\n");
+        _lthis++;
+        _lthat++;
 
-            strcat(out, linethat);
+        if (rthis == _lthis && rthat != _lthat)
+        {
+            _writeToOutput(">>>>>>>>>>>> #");
+            _writeToOutput(__itoa(rthat));
+            _writeToOutput(" - #");
+            _writeToOutput(__itoa(_lthat - 1));
+            _writeToOutput(" <<<<<<<<<<<<\n");
+
+            _writeToOutput(linethat);
 
             while (getline(&linethat, &lenthat, that) != -1)
             {
-                strcat(out, linethat);
+                _writeToOutput(linethat);
             }
         }
 
-        if (rthat == _lthat && rthis < _lthis)
+        if (rthat == _lthat && rthis != _lthis)
         {
-            strcat(out, ">>>>>>>>>>>> #");
-            strcat(out, __itoa(rthis));
-            strcat(out, " - #");
-            strcat(out, __itoa(_lthis));
-            strcat(out, " <<<<<<<<<<<<\n");
+            _writeToOutput(">>>>>>>>>>>> #");
+            _writeToOutput(__itoa(rthis));
+            _writeToOutput(" - #");
+            _writeToOutput(__itoa(_lthis - 1));
+            _writeToOutput(" <<<<<<<<<<<<\n");
 
-            strcat(out, linethis);
+            _writeToOutput(linethis);
             while (getline(&linethis, &lenthis, this) != -1)
             {
-                strcat(out, linethis);
+                _writeToOutput(linethis);
             }
         }
     }
-
-    return out;
 }
 
 /// @brief Compares the files
 /// @param this_path first file name
 /// @param that_path second file name
-/// @return output string
-char *compareFiles(char *this_path, char *that_path)
+void compareFiles(char *this_path, char *that_path)
 {
     char *path = malloc(512 * sizeof(char));
     strcpy(path, this_path);
@@ -2527,9 +2943,10 @@ char *compareFiles(char *this_path, char *that_path)
 
     if (i == -1 || !foundDot)
     {
-        printf("ERROR: Invalid file name.");
+        _writeToOutput("ERROR: Invalid file name\n");
+        free(path);
         chdir(parentDir);
-        return "-1";
+        return;
     }
 
     char *filename = malloc((strlen(path) - 1 - i) * sizeof(char));
@@ -2550,18 +2967,18 @@ char *compareFiles(char *this_path, char *that_path)
     {
         if (isFirst && strcmp(tok, "root"))
         {
-            printf("ERROR: File should be in root folder.\n");
+            _writeToOutput("ERROR: File should be in root folder\n");
             chdir(parentDir);
-            return "-1";
+            return;
         }
 
         isFirst = 0;
 
         if (chdir(tok))
         {
-            printf("Invalid directory.");
+            _writeToOutput("ERROR: Invalid directory\n");
             chdir(parentDir);
-            return "-1";
+            return;
         }
 
         path = NULL;
@@ -2569,9 +2986,12 @@ char *compareFiles(char *this_path, char *that_path)
 
     if (!__fileExists(filename))
     {
-        printf("ERROR: File %s does not exist.", path);
+        _writeToOutput("ERROR: File : ");
+        _writeToOutput(path);
+        _writeToOutput(" does not exist\n");
+        free(path);
         chdir(parentDir);
-        return "-1";
+        return;
     }
 
     FILE *thisfile = fopen(filename, "r+");
@@ -2588,9 +3008,10 @@ char *compareFiles(char *this_path, char *that_path)
 
     if (pi == -1 || !pfoundDot)
     {
-        printf("ERROR: Invalid file name.");
+        _writeToOutput("ERROR: Invalid file name\n");
+        free(path);
         chdir(parentDir);
-        return "-1";
+        return;
     }
 
     char *pfilename = malloc((strlen(ppath) - 1 - i) * sizeof(char));
@@ -2611,18 +3032,18 @@ char *compareFiles(char *this_path, char *that_path)
     {
         if (pisFirst && strcmp(ptok, "root"))
         {
-            printf("ERROR: File should be in root folder.\n");
+            _writeToOutput("ERROR: File should be in root folder\n");
             chdir(parentDir);
-            return "-1";
+            return;
         }
 
         pisFirst = 0;
 
         if (chdir(ptok))
         {
-            printf("Invalid directory.");
+            _writeToOutput("ERROR: Invalid directory\n");
             chdir(parentDir);
-            return "-1";
+            return;
         }
 
         ppath = NULL;
@@ -2630,14 +3051,22 @@ char *compareFiles(char *this_path, char *that_path)
 
     if (!__fileExists(pfilename))
     {
-        printf("ERROR: File %s does not exist.", ppath);
+        _writeToOutput("ERROR: File : ");
+        _writeToOutput(ppath);
+        _writeToOutput(" does not exist\n");
+        free(path);
         chdir(parentDir);
-        return "-1";
+        return;
     }
 
     FILE *thatfile = fopen(pfilename, "r+");
 
-    return __cmpFile(thisfile, thatfile, this_path, that_path);
+    __cmpFile(thisfile, thatfile, this_path, that_path);
+
+    fclose(thatfile);
+    fclose(thisfile);
+
+    chdir(parentDir);
 }
 
 /// @brief Checks if a path is file or directory
@@ -2652,9 +3081,8 @@ int __isFile(const char *path)
 
 /// @brief Helper function for tree
 /// @param depth current depth of tree
-/// @param out output string
 /// @param precspace preceding space
-void __tree(int depth, char *out, int precspace)
+void __tree(int depth, int precspace)
 {
     if (depth == 0)
         return;
@@ -2674,17 +3102,17 @@ void __tree(int depth, char *out, int precspace)
             continue;
 
         for (int k = 0; k < precspace; k++)
-            strcat(out, " ");
+            _writeToOutput(" ");
 
-        strcat(out, "|--> ");
-        strcat(out, de->d_name);
-        strcat(out, "\n");
+        _writeToOutput("|--> ");
+        _writeToOutput(de->d_name);
+        _writeToOutput("\n");
 
         if (!__isFile(de->d_name))
         {
             chdir(de->d_name);
 
-            __tree(depth - 1, out, precspace + 5);
+            __tree(depth - 1, precspace + 5);
 
             chdir("..");
         }
@@ -2693,30 +3121,27 @@ void __tree(int depth, char *out, int precspace)
 
 /// @brief Shows directory tree
 /// @param depth depth of tree, -1 means show all
-/// @return output string
-char *tree(int depth)
+void tree(int depth)
 {
-    char *out = calloc(10000, sizeof(char));
-
     chdir("root");
 
-    strcat(out, "root\n");
+    _writeToOutput("root\n");
 
-    __tree(depth, out, 0);
+    __tree(depth, 0);
 
     chdir(parentDir);
-    return out;
 }
 
-/// @brief Handles input from user (doesn't handle arman)
+/// @brief =D
 /// @param inp input command
-void handler(char *inp)
+/// @param str input string
+void arman(char *inp, char *str)
 {
-    char arg[128][32768];
     int argc = 0;
     int lenc = strlen(inp);
 
     char currarg[32768];
+    currarg[0] = '\0';
     int inQuote = 0;
     int currarglen = 0;
 
@@ -2731,15 +3156,11 @@ void handler(char *inp)
             }
             else
             {
-                strcpy(arg[argc], currarg);
-                argc++;
-                if (argc >= 128)
-                {
-                    printf("ERROR: Invalid number of arguments.");
-                    return;
-                }
+                currarg[currarglen] = '\0';
+                _addArg(currarg);
                 currarglen = 0;
                 currarg[0] = '\0';
+                argc++;
             }
         }
         else if (inp[i] == '"')
@@ -2786,7 +3207,7 @@ void handler(char *inp)
                     }
                     else if (inp[i + 1] != '"')
                     {
-                        printf("ERROR: Invalid or unsupported escape character.");
+                        _writeToOutput("ERROR: Invalid or unsupported escape character\n");
                         return;
                     }
                 }
@@ -2805,27 +3226,29 @@ void handler(char *inp)
 
         if (currarglen >= 32768)
         {
-            printf("ERROR: Argument size exceeded (32768 characters)");
+            _writeToOutput("ERROR: Argument size exceeded (32768 characters)\n");
             return;
         }
     }
 
     if (currarglen)
     {
-        strcpy(arg[argc], currarg);
+        currarg[currarglen] = '\0';
+        _addArg(currarg);
         argc++;
-        if (argc >= 128)
-        {
-            printf("ERROR: Invalid number of arguments.");
-            return;
-        }
         currarg[0] = '\0';
         currarglen = 0;
     }
 
     enum COMMAND com = INVALID;
 
-    for (int i = 0; i < 15; i++)
+    char *arg[argc];
+    for (int i = 0; i < argc; i++)
+    {
+        arg[i] = _getarg(i);
+    }
+
+    for (int i = 0; i < 14; i++)
     {
         if (!strcmp(arg[0], COMSTR[i]))
         {
@@ -2834,13 +3257,363 @@ void handler(char *inp)
         }
     }
 
+    int lineno, startpos, forward, cnt, byword, at, count, all, atnum, type;
+
+    switch (com)
+    {
+    case INSERTSTR:
+
+        if (argc != 5 || strcmp(arg[1], "--file") || strcmp(arg[3], "--pos"))
+        {
+            _writeToOutput("ERROR: Invalid command\n");
+            return;
+        }
+
+        if (sscanf(arg[4], "%d:%d", &lineno, &startpos) != 2)
+        {
+            _writeToOutput("ERROR: Invalid command\n");
+            return;
+        }
+
+        _makeACopy(arg[2]);
+        _pasteCopyInto(arg[2], insertStr(arg[2], str, lineno, startpos));
+
+        break;
+
+    case FIND:
+
+        if (argc >= 3) /*normal*/
+        {
+            if (strcmp(arg[1], "--file"))
+            {
+                _writeToOutput("ERROR: Invalid command\n");
+                return;
+            }
+
+            byword = 0, at = 0, count = 0, all = 0, atnum = -1;
+
+            for (int i = 3; i < argc; i++)
+            {
+                if (!strcmp(arg[i], "-byword"))
+                {
+                    byword++;
+                }
+                else if (!strcmp(arg[i], "-count"))
+                {
+                    count++;
+                }
+                else if (!strcmp(arg[i], "-all"))
+                {
+                    all++;
+                }
+                else if (!strcmp(arg[i], "-at"))
+                {
+                    at++;
+                }
+                else if (_isnum(arg[i]) && atnum != -1)
+                {
+                    atnum = _tonum(arg[i]);
+                }
+                else
+                {
+                    _writeToOutput("ERROR: Invalid command\n");
+                    return;
+                }
+            }
+
+            if (byword > 1 || at > 1 || count > 1 || all > 1 || (at == 1 && atnum == -1))
+            {
+                _writeToOutput("ERROR: Invalid command\n");
+                return;
+            }
+
+            type = (byword ? BYWORD : 0) +
+                   (count ? COUNT : 0) +
+                   (all ? ALL : 0) +
+                   (at ? AT : 0);
+
+            _makeACopy(arg[2]);
+            _pasteCopyInto(arg[2], find(arg[2], str, type, atnum));
+        }
+        else
+        {
+            _writeToOutput("ERROR: Invalid command\n");
+            return;
+        }
+
+        break;
+
+    case REPLACE:
+
+        if (argc >= 5) /*normal*/
+        {
+            if ((strcmp(arg[1], "--str1") && strcmp(arg[1], "--str2")) || strcmp(arg[3], "--file"))
+            {
+                _writeToOutput("ERROR: Invalid command\n");
+                return;
+            }
+
+            if (argc == 5)
+            {
+                _makeACopy(arg[4]);
+                if (arg[1][5] == '1')
+                {
+                    _pasteCopyInto(arg[4], replace(arg[4], arg[2], str, -2));
+                }
+                else
+                {
+                    _pasteCopyInto(arg[4], replace(arg[4], str, arg[2], -2));
+                }
+            }
+            else if (argc == 6)
+            {
+                if (!strcmp(arg[5], "-all"))
+                {
+                    if (arg[1][5] == '1')
+                    {
+                        _pasteCopyInto(arg[4], replace(arg[4], arg[2], str, -2));
+                    }
+                    else
+                    {
+                        _pasteCopyInto(arg[4], replace(arg[4], str, arg[2], -2));
+                    }
+                }
+                else
+                {
+                    _writeToOutput("ERROR: Invalid command\n");
+                    return;
+                }
+            }
+            else if (argc == 7)
+            {
+                if (!strcmp(arg[5], "-at") && _isnum(arg[6]))
+                {
+                    if (arg[1][5] == '1')
+                    {
+                        _pasteCopyInto(arg[4], replace(arg[4], arg[2], str, -2));
+                    }
+                    else
+                    {
+                        _pasteCopyInto(arg[4], replace(arg[4], str, arg[2], -2));
+                    }
+                }
+                else
+                {
+                    _writeToOutput("ERROR: Invalid command\n");
+                    return;
+                }
+            }
+            else
+            {
+                _writeToOutput("ERROR: Invalid command\n");
+                return;
+            }
+        }
+        else
+        {
+            _writeToOutput("ERROR: Invalid command\n");
+            return;
+        }
+
+        break;
+
+    case GREP:
+
+        if (argc >= 3)
+        {
+            if (!strcat(arg[1], "-c") || !strcat(arg[1], "-l"))
+            {
+                if (strcat(arg[2], "--files"))
+                {
+                    _writeToOutput("ERROR: Invalid command\n");
+                    return;
+                }
+                else
+                {
+                    char **strings = malloc((argc - 3) * sizeof(char *));
+                    for (int i = 3; i < argc; i++)
+                    {
+                        strings[i - 3] = arg[i];
+                    }
+
+                    grep(strings, argc - 3, str, arg[1][1]);
+                }
+            }
+            else
+            {
+                if (strcat(arg[1], "--files"))
+                {
+                    _writeToOutput("ERROR: Invalid command\n");
+                    return;
+                }
+                else
+                {
+                    char **strings = malloc((argc - 2) * sizeof(char *));
+                    for (int i = 2; i < argc; i++)
+                    {
+                        strings[i - 2] = arg[i];
+                    }
+
+                    grep(strings, argc - 2, str, 'n');
+                }
+            }
+        }
+        else
+        {
+            _writeToOutput("ERROR: Invalid command\n");
+            return;
+        }
+
+        break;
+
+    case INVALID:
+
+        _writeToOutput("ERROR: Invalid command\n");
+        return;
+
+        break;
+
+    default:
+        _writeToOutput("ERROR: Invalid command\n");
+        return;
+
+        break;
+    }
+}
+
+/// @brief Handles input from user (doesn't handle arman)
+/// @param inp input command
+void handler(char *inp)
+{
+    int argc = 0;
+    int lenc = strlen(inp);
+
+    char currarg[32768];
+    currarg[0] = '\0';
+    int inQuote = 0;
+    int currarglen = 0;
+
+    for (int i = 0; i < lenc; i++)
+    {
+        if (inp[i] == ' ')
+        {
+            if (inQuote)
+            {
+                strncat(currarg, inp + i, 1);
+                currarglen++;
+            }
+            else
+            {
+                currarg[currarglen] = '\0';
+                _addArg(currarg);
+                currarglen = 0;
+                currarg[0] = '\0';
+                argc++;
+            }
+        }
+        else if (inp[i] == '"')
+        {
+            int isrealquote = (i != 0 && inp[i - 1] != '\\');
+
+            if (isrealquote)
+            {
+                inQuote = !inQuote;
+            }
+            else
+            {
+                strncat(currarg, inp + i, 1);
+                currarglen++;
+            }
+        }
+        else if (inp[i] == '\\')
+        {
+            if (i != lenc - 1)
+            {
+                if (inp[i + 1] == '\\')
+                {
+                    strncat(currarg, inp + i, 1);
+                    currarglen++;
+                    i++;
+                    continue;
+                }
+                else
+                {
+                    if (inp[i + 1] == 'n')
+                    {
+                        strcat(currarg, "\n");
+                        currarglen++;
+                    }
+                    else if (inp[i + 1] == 't')
+                    {
+                        strcat(currarg, "\t");
+                        currarglen++;
+                    }
+                    else if (inp[i + 1] == 'v')
+                    {
+                        strcat(currarg, "\v");
+                        currarglen++;
+                    }
+                    else if (inp[i + 1] != '"')
+                    {
+                        _writeToOutput("ERROR: Invalid or unsupported escape character\n");
+                        return;
+                    }
+                }
+            }
+            else
+            {
+                strncat(currarg, inp + i, 1);
+                currarglen++;
+            }
+        }
+        else
+        {
+            strncat(currarg, inp + i, 1);
+            currarglen++;
+        }
+
+        if (currarglen >= 32768)
+        {
+            _writeToOutput("ERROR: Argument size exceeded (32768 characters)\n");
+            return;
+        }
+    }
+
+    if (currarglen)
+    {
+        currarg[currarglen] = '\0';
+        _addArg(currarg);
+        argc++;
+        currarg[0] = '\0';
+        currarglen = 0;
+    }
+
+    enum COMMAND com = INVALID;
+
+    char *arg[argc];
+    for (int i = 0; i < argc; i++)
+    {
+        arg[i] = _getarg(i);
+    }
+
+    for (int i = 0; i < 14; i++)
+    {
+        if (!strcmp(arg[0], COMSTR[i]))
+        {
+            com = ixtocom[i];
+            break;
+        }
+    }
+
+    int lineno, startpos, forward, cnt, byword, at, count, all, atnum, type;
+
     switch (com)
     {
     case CREATEFILE:
 
         if (argc != 3 || strcmp(arg[1], "--file"))
         {
-            printf("Invalid command.");
+            _writeToOutput("ERROR: Invalid command\n");
             return;
         }
 
@@ -2852,19 +3625,18 @@ void handler(char *inp)
 
         if (argc != 7 || strcmp(arg[1], "--file") || strcmp(arg[3], "--str") || strcmp(arg[5], "--pos"))
         {
-            printf("Invalid command.");
+            _writeToOutput("ERROR: Invalid command\n");
             return;
         }
-
-        int lineno, startpos;
 
         if (sscanf(arg[6], "%d:%d", &lineno, &startpos) != 2)
         {
-            printf("Invalid command.");
+            _writeToOutput("ERROR: Invalid command\n");
             return;
         }
 
-        insertStr(arg[2], arg[4], lineno, startpos);
+        _makeACopy(arg[2]);
+        _pasteCopyInto(arg[2], insertStr(arg[2], arg[4], lineno, startpos));
 
         break;
 
@@ -2872,7 +3644,7 @@ void handler(char *inp)
 
         if (argc != 3 || strcmp(arg[1], "--file"))
         {
-            printf("Invalid command.");
+            _writeToOutput("ERROR: Invalid command\n");
             return;
         }
 
@@ -2884,21 +3656,19 @@ void handler(char *inp)
 
         if (argc != 8 || strcmp(arg[1], "--file") || strcmp(arg[3], "--pos") || strcmp(arg[5], "-size"))
         {
-            printf("Invalid command.");
+            _writeToOutput("ERROR: Invalid command\n");
             return;
         }
 
-        int lineno, startpos, forward, cnt;
-
         if (sscanf(arg[4], "%d:%d", &lineno, &startpos) != 2)
         {
-            printf("Invalid command.");
+            _writeToOutput("ERROR: Invalid command\n");
             return;
         }
 
         if (sscanf(arg[6], "%d", &cnt) != 1)
         {
-            printf("Invalid command.");
+            _writeToOutput("ERROR: Invalid command\n");
             return;
         }
 
@@ -2912,11 +3682,12 @@ void handler(char *inp)
         }
         else
         {
-            printf("Invalid command.");
+            _writeToOutput("ERROR: Invalid command\n");
             return;
         }
 
-        removeStr(arg[2], lineno, startpos, cnt, forward);
+        _makeACopy(arg[2]);
+        _pasteCopyInto(arg[2], removeStr(arg[2], lineno, startpos, cnt, forward));
 
         break;
 
@@ -2924,21 +3695,19 @@ void handler(char *inp)
 
         if (argc != 8 || strcmp(arg[1], "--file") || strcmp(arg[3], "--pos") || strcmp(arg[5], "-size"))
         {
-            printf("Invalid command.");
+            _writeToOutput("ERROR: Invalid command\n");
             return;
         }
 
-        int lineno, startpos, forward, cnt;
-
         if (sscanf(arg[4], "%d:%d", &lineno, &startpos) != 2)
         {
-            printf("Invalid command.");
+            _writeToOutput("ERROR: Invalid command\n");
             return;
         }
 
         if (sscanf(arg[6], "%d", &cnt) != 1)
         {
-            printf("Invalid command.");
+            _writeToOutput("ERROR: Invalid command\n");
             return;
         }
 
@@ -2952,7 +3721,7 @@ void handler(char *inp)
         }
         else
         {
-            printf("Invalid command.");
+            _writeToOutput("ERROR: Invalid command\n");
             return;
         }
 
@@ -2964,21 +3733,19 @@ void handler(char *inp)
 
         if (argc != 8 || strcmp(arg[1], "--file") || strcmp(arg[3], "--pos") || strcmp(arg[5], "-size"))
         {
-            printf("Invalid command.");
+            _writeToOutput("ERROR: Invalid command\n");
             return;
         }
 
-        int lineno, startpos, forward, cnt;
-
         if (sscanf(arg[4], "%d:%d", &lineno, &startpos) != 2)
         {
-            printf("Invalid command.");
+            _writeToOutput("ERROR: Invalid command\n");
             return;
         }
 
         if (sscanf(arg[6], "%d", &cnt) != 1)
         {
-            printf("Invalid command.");
+            _writeToOutput("ERROR: Invalid command\n");
             return;
         }
 
@@ -2992,11 +3759,12 @@ void handler(char *inp)
         }
         else
         {
-            printf("Invalid command.");
+            _writeToOutput("ERROR: Invalid command\n");
             return;
         }
 
-        cutStr(arg[2], lineno, startpos, cnt, forward);
+        _makeACopy(arg[2]);
+        _pasteCopyInto(arg[2], cutStr(arg[2], lineno, startpos, cnt, forward));
 
         break;
 
@@ -3004,19 +3772,18 @@ void handler(char *inp)
 
         if (argc != 5 || strcmp(arg[1], "--file") || strcmp(arg[3], "--pos"))
         {
-            printf("Invalid command.");
+            _writeToOutput("ERROR: Invalid command\n");
             return;
         }
-
-        int lineno, startpos;
 
         if (sscanf(arg[4], "%d:%d", &lineno, &startpos) != 2)
         {
-            printf("Invalid command.");
+            _writeToOutput("ERROR: Invalid command\n");
             return;
         }
 
-        pasteStr(arg[2], lineno, startpos);
+        _makeACopy(arg[2]);
+        _pasteCopyInto(arg[2], pasteStr(arg[2], lineno, startpos));
 
         break;
 
@@ -3026,11 +3793,11 @@ void handler(char *inp)
         {
             if (strcmp(arg[1], "--str") || strcmp(arg[3], "--file"))
             {
-                printf("Invalid command.");
+                _writeToOutput("ERROR: Invalid command\n");
                 return;
             }
 
-            int byword = 0, at = 0, count = 0, all = 0, atnum = -1, otherargc = argc - 5;
+            byword = 0, at = 0, count = 0, all = 0, atnum = -1;
 
             for (int i = 5; i < argc; i++)
             {
@@ -3056,79 +3823,83 @@ void handler(char *inp)
                 }
                 else
                 {
-                    printf("Invalid command.");
+                    _writeToOutput("ERROR: Invalid command\n");
                     return;
                 }
             }
 
             if (byword > 1 || at > 1 || count > 1 || all > 1 || (at == 1 && atnum == -1))
             {
-                printf("Invalid command.");
+                _writeToOutput("ERROR: Invalid command\n");
                 return;
             }
 
-            int type = (byword ? BYWORD : 0) +
-                       (count ? COUNT : 0) +
-                       (all ? ALL : 0) +
-                       (at ? AT : 0);
+            type = (byword ? BYWORD : 0) +
+                   (count ? COUNT : 0) +
+                   (all ? ALL : 0) +
+                   (at ? AT : 0);
 
-            printf("%s\n", find(arg[4], arg[2], type, atnum));
+            _makeACopy(arg[4]);
+            _pasteCopyInto(arg[4], find(arg[4], arg[2], type, atnum));
         }
         else
         {
-            printf("Invalid command.");
+            _writeToOutput("ERROR: Invalid command\n");
             return;
         }
 
         break;
 
-    case REPLACE:
+    case REPLACE: /*check this again*/
 
-        if (argc >= 6) /*normal*/
+        if (argc >= 7) /*normal*/
         {
             if (strcmp(arg[1], "--str1") || strcmp(arg[3], "--str2") || strcmp(arg[5], "--file"))
             {
-                printf("Invalid command.");
+                _writeToOutput("ERROR: Invalid command\n");
                 return;
             }
 
-            if (argc == 6)
+            if (argc == 7)
             {
-                replace(arg[6], arg[2], arg[4], -2);
-            }
-            else if (argc == 7)
-            {
-                if (!strcmp(arg[6], "-all"))
-                {
-                    replace(arg[6], arg[2], arg[4], -1);
-                }
-                else
-                {
-                    printf("Invalid command.");
-                    return;
-                }
+                _makeACopy(arg[6]);
+                _pasteCopyInto(arg[6], replace(arg[6], arg[2], arg[4], -2));
             }
             else if (argc == 8)
             {
-                if (!strcmp(arg[6], "-at") && _isnum(arg[7]))
+                if (!strcmp(arg[7], "-all"))
                 {
-                    replace(arg[6], arg[2], arg[4], _tonum(arg[7]));
+                    _makeACopy(arg[6]);
+                    _pasteCopyInto(arg[6], replace(arg[6], arg[2], arg[4], -1));
                 }
                 else
                 {
-                    printf("Invalid command.");
+                    _writeToOutput("ERROR: Invalid command\n");
+                    return;
+                }
+            }
+            else if (argc == 9)
+            {
+                if (!strcmp(arg[7], "-at") && _isnum(arg[8]))
+                {
+                    _makeACopy(arg[6]);
+                    _pasteCopyInto(arg[6], replace(arg[6], arg[2], arg[4], _tonum(arg[8])));
+                }
+                else
+                {
+                    _writeToOutput("ERROR: Invalid command\n");
                     return;
                 }
             }
             else
             {
-                printf("Invalid command.");
+                _writeToOutput("ERROR: Invalid command\n");
                 return;
             }
         }
         else
         {
-            printf("Invalid command.");
+            _writeToOutput("ERROR: Invalid command\n");
             return;
         }
 
@@ -3142,35 +3913,47 @@ void handler(char *inp)
             {
                 if (strcat(arg[3], "--files"))
                 {
-                    printf("Invalid command.");
+                    _writeToOutput("ERROR: Invalid command\n");
                     return;
                 }
                 else
                 {
-                    printf("%s\n", grep(arg + 4, argc - 4, arg[2], 'n'));
+                    char **strings = malloc((argc - 4) * sizeof(char *));
+                    for (int i = 4; i < argc; i++)
+                    {
+                        strings[i - 4] = arg[i];
+                    }
+
+                    grep(strings, argc - 4, arg[2], 'n');
                 }
             }
             else if (!strcat(arg[1], "-c") || !strcat(arg[1], "-l"))
             {
                 if (strcat(arg[4], "--files"))
                 {
-                    printf("Invalid command.");
+                    _writeToOutput("ERROR: Invalid command\n");
                     return;
                 }
                 else
                 {
-                    printf("%s\n", grep(arg + 5, argc - 5, arg[2], arg[1][1]));
+                    char **strings = malloc((argc - 5) * sizeof(char *));
+                    for (int i = 5; i < argc; i++)
+                    {
+                        strings[i - 5] = arg[i];
+                    }
+
+                    grep(strings, argc - 5, arg[2], arg[1][1]);
                 }
             }
             else
             {
-                printf("Invalid command.");
+                _writeToOutput("ERROR: Invalid command\n");
                 return;
             }
         }
         else
         {
-            printf("Invalid command.");
+            _writeToOutput("ERROR: Invalid command\n");
             return;
         }
 
@@ -3180,7 +3963,7 @@ void handler(char *inp)
 
         if (argc != 3 || strcmp(arg[1], "--file"))
         {
-            printf("Invalid command.");
+            _writeToOutput("ERROR: Invalid command\n");
             return;
         }
 
@@ -3189,43 +3972,47 @@ void handler(char *inp)
         break;
 
     case AUTOINDENT:
-        
+
         if (argc != 2)
         {
-            printf("Invalid command.");
+            _writeToOutput("ERROR: Invalid command\n");
             return;
         }
 
-        autoIndent(arg[1]);
+        _makeACopy(arg[1]);
+        _pasteCopyInto(arg[1], autoIndent(arg[1]));
 
         break;
 
     case COMPARE:
-        
+
         if (argc != 3)
         {
-            printf("Invalid command.");
+            _writeToOutput("ERROR: Invalid command\n");
             return;
         }
 
-        printf("%s\n", compareFiles(arg[1], arg[2]));
+        compareFiles(arg[1], arg[2]);
 
         break;
 
     case TREE:
-        
+
         if (argc != 2)
         {
-            printf("Invalid command.");
+            _writeToOutput("ERROR: Invalid command\n");
             return;
         }
 
-        printf("%s\n", _tonum(arg[1]));
+        tree(strcmp(arg[1], "-1") ? _tonum(arg[1]) : -1);
 
         break;
 
     case INVALID:
-        /* code */
+
+        _writeToOutput("ERROR: Invalid command\n");
+        return;
+
         break;
 
     default:
@@ -3235,10 +4022,12 @@ void handler(char *inp)
 
 void Handler(char *inp)
 {
+    chdir(parentDir);
     int n = strlen(inp);
 
-    char first[32768 * 128];
-    char second[32768 * 128];
+    FILE *firstf = fopen("first.first", "w");
+    FILE *secondf = fopen("second.second", "w");
+
     int inquote = 0;
     int isarman = 0;
 
@@ -3256,8 +4045,18 @@ void Handler(char *inp)
 
         if (!inquote && inp[i] == ' ' && inp[i + 1] == '=' && inp[i + 2] == 'D' && inp[i + 3] == ' ')
         {
-            strncpy(first, inp, i);
-            strncpy(second, inp + i + 4, n - i - 4);
+            for (int j = 0; j < i; j++)
+            {
+                fputc(inp[j], firstf);
+            }
+            fputc(EOF, firstf);
+
+            for (int j = i + 4; j < n; j++)
+            {
+                fputc(inp[j], secondf);
+            }
+            fputc(EOF, secondf);
+
             isarman = 1;
             break;
         }
@@ -3265,77 +4064,56 @@ void Handler(char *inp)
 
     if (isarman)
     {
-        // handle first and second
+        fclose(firstf);
+        fclose(secondf);
+        firstf = fopen("first.first", "r");
+        secondf = fopen("second.second", "r");
+
+        handler(__toString(firstf));
+        FILE *fp = fopen(outputPath, "r");
+        char *str = __toString(fp);
+        fclose(fp);
+
+        _clearOutput();
+        _deleteArgs();
+
+        arman(__toString(secondf), str);
+        fclose(fp);
+        fclose(firstf);
+        fclose(secondf);
     }
     else
     {
-        // handle inp
+        handler(inp);
+        fclose(firstf);
+        fclose(secondf);
     }
+
+    remove("first.first");
+    remove("second.second");
+
+    _deleteArgs();
+    _showOutput();
+    _clearOutput();
 }
 
 int main()
 {
     init();
-    char s[32768 * 20];
-    int len = 0;
 
+    char s[32768] = "insertstr --file /root/blah/j.txt --str test --pos 1:0";
+
+    printf(">>> ");
     gets(s);
-    printf("%s", s);
 
-    handler(s);
-
-    // char *s1 = "/root/bruh/wtf/this/is/a/test/myfile2.txt";
-    // char *s2 = "/root/bruh/wtf/this/is/a/test/myfile1.txt";
-
-    // printf("%s", tree(-1));
-
-    // cat(s);
-    // autoIndent(s);
-    // cat(s);
-
-    // char **f = malloc(1 * sizeof(char *));
-    // f[0] = s;
-
-    // printf("%s", grep(f, 1, "bruh", 'l'));
-
-    // replace(s, "bruhbrdsadas", "xxx", -1);
-
-    // createFile(s);
-    // insertStr(s, "bruh bruh bruh kdlskdfsf fddsfs\nfsfsd bruh", 1, 0);
-    // cat(s);
-
-    // char* jk = find(s, "sdfsdfsdf", BYWORD | AT, -1);
-
-    // puts(jk);
-
-    // strcpy(str, "bd\\*dssd*");
-
-    // cat(buf);
-
-    //   0000000000111111111122222222223333333333444444444455555555556666666666
-    //   0123456789012345678901234567890123456789012345678901234567890123456789
-    // char* str = " how is this even possible? lmao wtf lol   damn hiiiii bruh jhi";
-    // int a[5] = {3, 10, 18, 25, 55};
-
-    // int strs = sizeof(str) / sizeof(str[0]);
-
-    // __toWordArr(str, a);
-
-    // for(int i = 0; i < 5; i++)
-    //     printf("%d ", a[i]);
+    while (strcmp(s, "exit"))
+    {
+        Handler(s);
+        printf(">>> ");
+        gets(s);
+    }
 
     finish();
+
+    return 0;
 }
-
-/*
-
-hi this is a test
-wtf
-12 123
-123 4125235
-124235 2402i3 2402i42
-owpjefs ffsk sld;ln l;msd;fln
-dflm;
-
-
-*/
