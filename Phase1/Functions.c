@@ -210,9 +210,11 @@ void _showOutput()
 /// @return copy-path
 char *__copyPath(char *filename)
 {
-    char *out = malloc((strlen(filename) + 5) * sizeof(char));
+    char *out = malloc((strlen(filename) + strlen(parentDir) + 30) * sizeof(char));
 
-    strcpy(out, filename);
+    out[0] = '\0';
+    strcpy(out, ".");
+    strcat(out, filename);
     strcat(out, "copy");
 
     return out;
@@ -223,9 +225,11 @@ char *__copyPath(char *filename)
 /// @return undo-path
 char *__undoPath(char *filename)
 {
-    char *out = malloc((strlen(filename) + 5) * sizeof(char));
+    char *out = malloc((strlen(filename) + strlen(parentDir) + 30) * sizeof(char));
 
-    strcpy(out, filename);
+    out[0] = '\0';
+    strcpy(out, ".");
+    strcat(out, filename);
     strcat(out, "undo");
 
     return out;
@@ -394,6 +398,15 @@ void _deleteArgs()
     }
 
     currargc = 0;
+}
+
+/// @brief Empties the cache folders
+void _deleteCache()
+{
+    chdir(parentDir);
+    chdir("root");
+
+    rmdir(".args");
 }
 
 /// @brief Compares two files
@@ -591,7 +604,7 @@ void _pasteCopyInto(char *__file_path, int done)
 /// @brief Ends the program
 void finish()
 {
-    // remove(clipboardPath);
+    _deleteCache();
 }
 
 /// @brief Gets number of lines, words and characters in the file
@@ -1185,6 +1198,7 @@ int insertStr(char *__file_path, char *text, int row, int col)
             if (r == row)
             {
                 int _dum_ = strlen(line);
+
                 for (int j = 0; j < _dum_; j++)
                 {
                     if (j == col)
@@ -1194,7 +1208,13 @@ int insertStr(char *__file_path, char *text, int row, int col)
                     }
                     fputc(line[j], nfp);
                 }
-            }
+
+                if (_dum_ == col)
+                {
+                    found = 1;
+                    fputs(text, nfp);
+                }
+                        }
             else
             {
                 fputs(line, nfp);
@@ -1309,20 +1329,15 @@ void cat(char *__file_path)
     char *line = NULL;
     size_t len = 0;
 
-    _writeToOutput("\t ============|");
-    _writeToOutput(filename);
-    _writeToOutput("|============\n\n");
-
     if (!__isEmpty(fp))
     {
         while (getline(&line, &len, fp) != -1)
         {
-            _writeToOutput(__itoa(r++));
-            _writeToOutput("\t| ");
             _writeToOutput(line);
         }
     }
-    _writeToOutput("\n\t --------------------------------------\n");
+
+    _writeToOutput("\n");
 
     fclose(fp);
     free(line);
@@ -1427,7 +1442,7 @@ int removeStr(char *__file_path, int row, int col, int count, int forward)
     int lines, words, chars;
     __fileLen(filename, &chars, &lines, &words);
     int ix = __index(filename, row, col);
-    int e_ix = ix + mul * (count - 1);
+    int e_ix = ix + mul * (count);
 
     if (ix == -1)
     {
@@ -1452,7 +1467,7 @@ int removeStr(char *__file_path, int row, int col, int count, int forward)
     }
 
     int s_ix = (e_ix < ix ? e_ix : ix),
-        f_ix = (e_ix > ix ? e_ix : ix);
+        f_ix = (e_ix > ix ? e_ix : ix) - 1;
 
     char c_c;
 
@@ -1592,7 +1607,7 @@ int copyStr(char *__file_path, int row, int col, int count, int forward)
     int lines, words, chars;
     __fileLen(filename, &chars, &lines, &words);
     int ix = __index(filename, row, col);
-    int e_ix = ix + mul * (count - 1);
+    int e_ix = ix + mul * (count);
 
     if (ix == -1)
     {
@@ -1619,7 +1634,7 @@ int copyStr(char *__file_path, int row, int col, int count, int forward)
     }
 
     int s_ix = (e_ix < ix ? e_ix : ix),
-        f_ix = (e_ix > ix ? e_ix : ix);
+        f_ix = (e_ix > ix ? e_ix : ix) - 1;
 
     char c_c;
 
@@ -1632,8 +1647,6 @@ int copyStr(char *__file_path, int row, int col, int count, int forward)
         }
         fputc(c_c, nfp);
     }
-
-    /**/
 
     fclose(fp);
     fclose(nfp);
@@ -1770,7 +1783,7 @@ int cutStr(char *__file_path, int row, int col, int count, int forward)
     int lines, words, chars;
     __fileLen(filename, &chars, &lines, &words);
     int ix = __index(filename, row, col);
-    int e_ix = ix + mul * (count - 1);
+    int e_ix = ix + mul * (count);
 
     if (ix == -1)
     {
@@ -1797,7 +1810,7 @@ int cutStr(char *__file_path, int row, int col, int count, int forward)
     }
 
     int s_ix = (e_ix < ix ? e_ix : ix),
-        f_ix = (e_ix > ix ? e_ix : ix);
+        f_ix = (e_ix > ix ? e_ix : ix) - 1;
 
     char c_c;
 
@@ -1813,8 +1826,6 @@ int cutStr(char *__file_path, int row, int col, int count, int forward)
             fputc(c_c, nfp);
         }
     }
-
-    /**/
 
     fclose(fp);
     fclose(nfp);
@@ -1991,6 +2002,7 @@ int find(char *__file_path, char *pat_, int f_type, int at)
     if (f_type & COUNT)
     {
         _writeToOutput(__itoa(matchno));
+        _writeToOutput("\n");
         fclose(fp);
         chdir(parentDir);
         return 1;
@@ -2012,6 +2024,7 @@ int find(char *__file_path, char *pat_, int f_type, int at)
             }
         }
 
+        _writeToOutput("\n");
         fclose(fp);
         chdir(parentDir);
         return 1;
@@ -2020,12 +2033,14 @@ int find(char *__file_path, char *pat_, int f_type, int at)
     if (f_type & AT)
     {
         _writeToOutput(__itoa(cmatch[at]));
+        _writeToOutput("\n");
         fclose(fp);
         chdir(parentDir);
         return 1;
     }
 
     _writeToOutput(__itoa(cmatch[0]));
+    _writeToOutput("\n");
 
     fclose(fp);
     chdir(parentDir);
@@ -3193,19 +3208,32 @@ void arman(char *inp, char *str)
                     if (inp[i + 1] == 'n')
                     {
                         strcat(currarg, "\n");
+                        i++;
+                        continue;
                         currarglen++;
                     }
                     else if (inp[i + 1] == 't')
                     {
                         strcat(currarg, "\t");
+                        i++;
+                        continue;
                         currarglen++;
                     }
                     else if (inp[i + 1] == 'v')
                     {
                         strcat(currarg, "\v");
+                        i++;
+                        continue;
                         currarglen++;
                     }
-                    else if (inp[i + 1] != '"')
+                    else if (inp[i + 1] == '"')
+                    {
+                        strcat(currarg, "\"");
+                        i++;
+                        continue;
+                        currarglen++;
+                    }
+                    else
                     {
                         _writeToOutput("ERROR: Invalid or unsupported escape character\n");
                         return;
@@ -3541,19 +3569,32 @@ void handler(char *inp)
                     if (inp[i + 1] == 'n')
                     {
                         strcat(currarg, "\n");
+                        i++;
+                        continue;
                         currarglen++;
                     }
                     else if (inp[i + 1] == 't')
                     {
                         strcat(currarg, "\t");
+                        i++;
+                        continue;
                         currarglen++;
                     }
                     else if (inp[i + 1] == 'v')
                     {
                         strcat(currarg, "\v");
+                        i++;
+                        continue;
                         currarglen++;
                     }
-                    else if (inp[i + 1] != '"')
+                    else if (inp[i + 1] == '"')
+                    {
+                        strcat(currarg, "\"");
+                        i++;
+                        continue;
+                        currarglen++;
+                    }
+                    else
                     {
                         _writeToOutput("ERROR: Invalid or unsupported escape character\n");
                         return;
