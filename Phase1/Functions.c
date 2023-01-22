@@ -400,6 +400,50 @@ void _deleteArgs()
     currargc = 0;
 }
 
+/// @brief Checks if a path is file or directory
+/// @param path path
+/// @return 1 if is file
+int __isFile(const char *path)
+{
+    struct stat ps;
+    stat(path, &ps);
+    return S_ISREG(ps.st_mode);
+}
+
+/// @brief helper function to clear cache
+void _removeDots()
+{
+    struct dirent *de;
+    DIR *dr = opendir(".");
+
+    if (dr == NULL)
+    {
+        return;
+    }
+
+    while ((de = readdir(dr)) != NULL)
+    {
+        if (!strcmp(de->d_name, ".") || !strcmp(de->d_name, ".."))
+        {
+            continue;
+        }
+
+        if (!__isFile(de->d_name))
+        {
+            chdir(de->d_name);
+
+            _removeDots();
+
+            chdir("..");
+        }
+        else
+        {
+            if (de->d_name[0] == '.')
+                remove(de->d_name);
+        }
+    }
+}
+
 /// @brief Empties the cache folders
 void _deleteCache()
 {
@@ -407,6 +451,15 @@ void _deleteCache()
     chdir("root");
 
     rmdir(".args");
+    remove(".clipboard\\clipboard.clp");
+    rmdir(".clipboard");
+    remove(".output\\out.out");
+    rmdir(".output");
+
+    chdir(parentDir);
+    chdir("root");
+
+    _removeDots();
 }
 
 /// @brief Compares two files
@@ -958,7 +1011,7 @@ short *__toPat(char *str, int *retsize)
 /// @param pat pattern
 /// @param last_ix last index of match
 /// @return 1 if found, 0 otherwise
-int match_str(const char *str, const short *pat, int* lastix)
+int match_str(const char *str, const short *pat, int *lastix)
 {
     const short *star = NULL;
     const char *ss = str;
@@ -1028,7 +1081,7 @@ int match_str(const char *str, const short *pat, int* lastix)
 /// @param pats size of pattern
 /// @param s_i starting index
 /// @return index of match, -1 if not found
-int __find(char *str, short *pat, int pats, int s_i, int* last_ix)
+int __find(char *str, short *pat, int pats, int s_i, int *last_ix)
 {
     int strs = strlen(str);
 
@@ -1263,8 +1316,14 @@ int insertStr(char *__file_path, char *text, int row, int col)
             {
                 fputs(line, nfp);
             }
-
+            
             r++;
+        }
+
+        if(row == r && col == 0)
+        {
+            found = 1;
+            fputs(text, nfp);
         }
     }
     else
@@ -1923,6 +1982,116 @@ int pasteStr(char *__file_path, int row, int col)
     return out;
 }
 
+/// @brief Finds a pattern in the file (helper for grep)
+/// @param __file_path file name
+/// @param pat_ pattern to be matched
+/// @return 1 if successful, 0 if not
+int crazy_find(char *__file_path, char *pat_)
+{
+    char *path = malloc(512 * sizeof(char));
+    strcpy(path, __file_path);
+
+    int i, foundDot = 0;
+    for (i = (int)strlen(path) - 1; path[i] != '/' && i > -1; i--)
+    {
+        foundDot |= (path[i] == '.');
+    }
+
+    if (i == -1 || !foundDot)
+    {
+        _writeToOutput("ERROR: Invalid file name\n");
+        chdir(parentDir);
+        return 0;
+    }
+
+    char *filename = malloc((unsigned int)((int)strlen(path) - 1 - i) * sizeof(char));
+
+    int _blahblah_ = (int)strlen(path);
+    for (int j = i + 1; j < _blahblah_; j++)
+    {
+        filename[j - i - 1] = path[j];
+    }
+
+    filename[(int)strlen(path) - 1 - i] = '\0';
+    path[i] = '\0';
+
+    char *tok;
+    int isFirst = 1;
+
+    while ((tok = strtok(path, "/")) != NULL)
+    {
+        if (isFirst && strcmp(tok, "root"))
+        {
+            _writeToOutput("ERROR: File should be in root folder\n");
+            chdir(parentDir);
+            return 0;
+        }
+
+        isFirst = 0;
+
+        if (chdir(tok))
+        {
+            _writeToOutput("ERROR: Invalid directory\n");
+            chdir(parentDir);
+            return 0;
+        }
+
+        path = NULL;
+    }
+
+    if (!__fileExists(filename))
+    {
+        _writeToOutput("ERROR: File : ");
+        _writeToOutput(path);
+        _writeToOutput(" does not exist\n");
+        chdir(parentDir);
+        return 0;
+    }
+
+    FILE *fp = fopen(filename, "r+");
+
+    char *str = __toString(fp);
+
+    int pats;
+    short *pat = __toPat(pat_, &pats);
+    if ((pats == 1 && pat[0] == -1) || (pats == 2 && pat[0] == -1 && pat[1] == -1))
+    {
+        _writeToOutput("ERROR: Invalid regex\n");
+        return 0;
+    }
+
+    int cmatch[512];
+    int matchno = 0;
+
+    int _dum_ = (int)strlen(str);
+    for (int ii = 0; ii < _dum_; ii++)
+    {
+        int last_ix = ii;
+        int c_index = __find(str, pat, pats, ii, &last_ix);
+        if (c_index != -1)
+        {
+            if (pat[0] != -1 && c_index > 0 && !(str[c_index - 1] == ' ' || str[c_index - 1] == '\n' || str[c_index - 1] == '\t'))
+            {
+                continue;
+            }
+            else if (pat[pats - 1] != -1 && last_ix < _dum_ && !(str[last_ix] == ' ' || str[last_ix] == '\n' || str[last_ix] == '\t'))
+            {
+                continue;
+            }
+            else
+            {
+                cmatch[matchno++] = c_index;
+                ii = c_index;
+            }
+        }
+    }
+
+    fclose(fp);
+    chdir(parentDir);
+    return matchno ? 1 : 0;
+}
+
+
 /// @brief Finds a pattern in the file
 /// @param __file_path file name
 /// @param pat_ pattern to be matched
@@ -2365,6 +2534,7 @@ char *__specialFind(char *__file_path, char *pat_)
     if ((pats == 1 && pat[0] == -1) || (pats == 2 && pat[0] == -1 && pat[1] == -1))
     {
         _writeToOutput("ERROR: Invalid regex\n");
+        chdir(parentDir);
         return "-1";
     }
 
@@ -2392,6 +2562,12 @@ char *__specialFind(char *__file_path, char *pat_)
                 ii = c_index;
             }
         }
+    }
+
+    if(!matchno)
+    {
+        chdir(parentDir);
+        return "-1";
     }
 
     int clinestart = 0;
@@ -2445,7 +2621,7 @@ void grep(char **files, int s_files, char *str, char option)
     {
         for (int i = 0; i < s_files; i++)
         {
-            int res = find(files[i], str, 0, 0);
+            int res = crazy_find(files[i], str);
             if (res)
             {
                 _writeToOutput(files[i]);
@@ -2458,13 +2634,14 @@ void grep(char **files, int s_files, char *str, char option)
         int o = 0;
         for (int i = 0; i < s_files; i++)
         {
-            int res = find(files[i], str, 0, 0);
+            int res = crazy_find(files[i], str);
             if (res)
             {
                 o++;
             }
         }
         _writeToOutput(__itoa(o));
+        _writeToOutput("\n");
     }
     else
     {
@@ -2540,6 +2717,14 @@ void undo(char *__file_path)
         _writeToOutput("ERROR: File : ");
         _writeToOutput(path);
         _writeToOutput(" does not exist\n");
+        free(path);
+        chdir(parentDir);
+        return;
+    }
+
+    if (!__fileExists(__undoPath(filename)))
+    {
+        _writeToOutput("ERROR: No undo available\n");
         free(path);
         chdir(parentDir);
         return;
@@ -2669,7 +2854,7 @@ int autoIndent(char *__file_path)
         {
             char *ins = malloc(1024 * sizeof(char));
             int ins_s = 0;
-            int ignorespace = 1;
+            int ignorespace = 0;
 
             int glen = strlen(line);
 
@@ -2827,8 +3012,16 @@ char *__cmpLine(char *this, char *that)
         char *out = calloc((strlen(this) + strlen(that) + 15), sizeof(char));
 
         strcat(out, this);
-        strcat(out, "\n");
+        if (out[strlen(out) - 1] != '\n')
+        {
+            strcat(out, "\n");
+        }
         strcat(out, that);
+
+        if (out[strlen(out) - 1] == '\n')
+        {
+            out[strlen(out) - 1] = '\0';
+        }
 
         return out;
     }
@@ -2921,16 +3114,25 @@ char *__cmpLine(char *this, char *that)
         if (diff == 1)
         {
             strcat(out, outthisone);
-            out[strlen(out) - 1] = '\0';
-            strcat(out, "\n");
+            if (out[strlen(out) - 1] != '\n')
+            {
+                strcat(out, "\n");
+            }
             strcat(out, outthatone);
         }
         else
         {
             strcat(out, outthis);
-            out[strlen(out) - 1] = '\0';
-            strcat(out, "\n");
+            if (out[strlen(out) - 1] != '\n')
+            {
+                strcat(out, "\n");
+            }
             strcat(out, outthat);
+        }
+
+        if (out[strlen(out) - 1] == '\n')
+        {
+            out[strlen(out) - 1] = '\0';
         }
 
         return out;
@@ -3109,7 +3311,7 @@ void compareFiles(char *this_path, char *that_path)
         return;
     }
 
-    char *pfilename = malloc((strlen(ppath) - 1 - i) * sizeof(char));
+    char *pfilename = malloc((strlen(ppath) - 1 - pi) * sizeof(char));
 
     int _pdum_ = strlen(ppath);
     for (int pj = pi + 1; pj < _pdum_; pj++)
@@ -3162,16 +3364,6 @@ void compareFiles(char *this_path, char *that_path)
     fclose(thisfile);
 
     chdir(parentDir);
-}
-
-/// @brief Checks if a path is file or directory
-/// @param path path
-/// @return 1 if is file
-int __isFile(const char *path)
-{
-    struct stat ps;
-    stat(path, &ps);
-    return S_ISREG(ps.st_mode);
 }
 
 /// @brief Helper function for tree
@@ -3289,34 +3481,35 @@ void arman(char *inp, char *str)
                     {
                         strcat(currarg, "\n");
                         i++;
-                        continue;
                         currarglen++;
+                        continue;
                     }
                     else if (inp[i + 1] == 't')
                     {
                         strcat(currarg, "\t");
                         i++;
-                        continue;
                         currarglen++;
+                        continue;
                     }
                     else if (inp[i + 1] == 'v')
                     {
                         strcat(currarg, "\v");
                         i++;
-                        continue;
                         currarglen++;
+                        continue;
                     }
                     else if (inp[i + 1] == '"')
                     {
                         strcat(currarg, "\"");
                         i++;
-                        continue;
                         currarglen++;
+                        continue;
                     }
                     else
                     {
-                        _writeToOutput("ERROR: Invalid or unsupported escape character\n");
-                        return;
+                        strncat(currarg, inp + i, 1);
+                        currarglen++;
+                        continue;
                     }
                 }
             }
@@ -3527,11 +3720,11 @@ void arman(char *inp, char *str)
 
     case GREP:
 
-        if (argc >= 3)
+        if (argc >= 2)
         {
-            if (!strcat(arg[1], "-c") || !strcat(arg[1], "-l"))
+            if (argc >= 3 && (!strcmp(arg[1], "-c") || !strcmp(arg[1], "-l")))
             {
-                if (strcat(arg[2], "--files"))
+                if (strcmp(arg[2], "--files"))
                 {
                     _writeToOutput("ERROR: Invalid command\n");
                     return;
@@ -3549,7 +3742,7 @@ void arman(char *inp, char *str)
             }
             else
             {
-                if (strcat(arg[1], "--files"))
+                if (strcmp(arg[1], "--files"))
                 {
                     _writeToOutput("ERROR: Invalid command\n");
                     return;
@@ -3650,34 +3843,35 @@ void handler(char *inp)
                     {
                         strcat(currarg, "\n");
                         i++;
-                        continue;
                         currarglen++;
+                        continue;
                     }
                     else if (inp[i + 1] == 't')
                     {
                         strcat(currarg, "\t");
                         i++;
-                        continue;
                         currarglen++;
+                        continue;
                     }
                     else if (inp[i + 1] == 'v')
                     {
                         strcat(currarg, "\v");
                         i++;
-                        continue;
                         currarglen++;
+                        continue;
                     }
                     else if (inp[i + 1] == '"')
                     {
                         strcat(currarg, "\"");
                         i++;
-                        continue;
                         currarglen++;
+                        continue;
                     }
                     else
                     {
-                        _writeToOutput("ERROR: Invalid or unsupported escape character\n");
-                        return;
+                        strncat(currarg, inp + i, 1);
+                        currarglen++;
+                        continue;
                     }
                 }
             }
@@ -4028,11 +4222,11 @@ void handler(char *inp)
 
     case GREP:
 
-        if (argc >= 5)
+        if (argc >= 4)
         {
-            if (!strcat(arg[1], "--str"))
+            if (!strcmp(arg[1], "--str"))
             {
-                if (strcat(arg[3], "--files"))
+                if (strcmp(arg[3], "--files"))
                 {
                     _writeToOutput("ERROR: Invalid command\n");
                     return;
@@ -4048,9 +4242,9 @@ void handler(char *inp)
                     grep(strings, argc - 4, arg[2], 'n');
                 }
             }
-            else if (!strcat(arg[1], "-c") || !strcat(arg[1], "-l"))
+            else if (argc >= 5 && (!strcmp(arg[1], "-c") || !strcmp(arg[1], "-l")))
             {
-                if (strcat(arg[4], "--files"))
+                if (strcmp(arg[4], "--files"))
                 {
                     _writeToOutput("ERROR: Invalid command\n");
                     return;
@@ -4063,7 +4257,7 @@ void handler(char *inp)
                         strings[i - 5] = arg[i];
                     }
 
-                    grep(strings, argc - 5, arg[2], arg[1][1]);
+                    grep(strings, argc - 5, arg[3], arg[1][1]);
                 }
             }
             else
