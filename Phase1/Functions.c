@@ -918,7 +918,7 @@ int __matchc(short patc, char strc)
 short *__toPat(char *str, int *retsize)
 {
     int n = strlen(str);
-    short *out = malloc(n * sizeof(short));
+    short *out = malloc((n + 1) * sizeof(short));
     int ixout = 0;
 
     for (int i = 0; i < n; i++)
@@ -948,8 +948,78 @@ short *__toPat(char *str, int *retsize)
     }
 
     *retsize = ixout;
+    out[n] = -2;
 
     return out;
+}
+
+/// @brief helper function for __find
+/// @param str string
+/// @param pat pattern
+/// @param last_ix last index of match
+/// @return 1 if found, 0 otherwise
+int match_str(const char *str, const short *pat, int* lastix)
+{
+    const short *star = NULL;
+    const char *ss = str;
+    int last_dummy = *lastix;
+
+    while (*str && *pat != -2)
+    {
+        if (*pat == -1)
+        {
+            if (__matchc(*pat, *str))
+            {
+                star = pat++;
+                ss = str;
+                last_dummy = *lastix;
+                continue;
+            }
+            else
+            {
+                star = NULL;
+                ss = str;
+                last_dummy = *lastix;
+                pat++;
+                continue;
+            }
+        }
+        else
+        {
+            if (__matchc(*pat, *str))
+            {
+                if (*str == ' ' || *str == '\n' || *str == '\t')
+                {
+                    star = NULL;
+                }
+                str++;
+                (*lastix)++;
+                pat++;
+                continue;
+            }
+        }
+
+        if (star)
+        {
+            pat = star + 1;
+            if (*str == ' ' || *str == '\n' || *str == '\t')
+            {
+                star = NULL;
+            }
+            str = ++ss;
+            *lastix = ++last_dummy;
+            continue;
+        }
+
+        return 0;
+    }
+
+    while (*pat == -1)
+    {
+        pat++;
+    }
+
+    return *pat == -2;
 }
 
 /// @brief Matches two strings
@@ -958,47 +1028,21 @@ short *__toPat(char *str, int *retsize)
 /// @param pats size of pattern
 /// @param s_i starting index
 /// @return index of match, -1 if not found
-int __find(char *str, short *pat, int pats, int s_i)
+int __find(char *str, short *pat, int pats, int s_i, int* last_ix)
 {
     int strs = strlen(str);
 
     for (int i = s_i; i < strs; i++)
     {
-        int j = (pat[0] == -1);
-        int ip = i;
-
-        while (j < (pats - (pat[pats - 1] == -1)) && ip < strs)
+        *last_ix = i;
+        if (match_str(str + i, pat, last_ix))
         {
-            if (__matchc(pat[j], str[ip]))
+            while (i < strs && pat[0] == -1 && __matchc(pat[0], str[i]))
             {
-                j++;
-                ip++;
-            }
-            else
-            {
-                break;
-            }
-        }
-
-        if (j == (pats - (pat[pats - 1] == -1)))
-        {
-            if (pat[0] == -1)
-            {
-                if (i == 0 || !(__matchc(pat[0], str[i - 1])))
-                {
-                    continue;
-                }
+                i++;
             }
 
-            if (pat[strs - 1] == -1)
-            {
-                if (!__matchc(pat[j], str[ip]))
-                {
-                    continue;
-                }
-            }
-
-            return i;
+            return i == strs ? -1 : i;
         }
     }
 
@@ -1214,7 +1258,7 @@ int insertStr(char *__file_path, char *text, int row, int col)
                     found = 1;
                     fputs(text, nfp);
                 }
-                        }
+            }
             else
             {
                 fputs(line, nfp);
@@ -1972,11 +2016,23 @@ int find(char *__file_path, char *pat_, int f_type, int at)
     int _dum_ = (int)strlen(str);
     for (int ii = 0; ii < _dum_; ii++)
     {
-        int c_index = __find(str, pat, pats, ii);
+        int last_ix = ii;
+        int c_index = __find(str, pat, pats, ii, &last_ix);
         if (c_index != -1)
         {
-            cmatch[matchno++] = c_index;
-            ii = c_index;
+            if (pat[0] != -1 && c_index > 0 && !(str[c_index - 1] == ' ' || str[c_index - 1] == '\n' || str[c_index - 1] == '\t'))
+            {
+                continue;
+            }
+            else if (pat[pats - 1] != -1 && last_ix < _dum_ && !(str[last_ix] == ' ' || str[last_ix] == '\n' || str[last_ix] == '\t'))
+            {
+                continue;
+            }
+            else
+            {
+                cmatch[matchno++] = c_index;
+                ii = c_index;
+            }
         }
     }
 
@@ -2144,11 +2200,23 @@ int replace(char *__file_path, char *str, char *fill, int at)
 
     for (int ii = 0; ii < _dum_; ii++)
     {
-        int c_index = __find(fstr, pat, pats, ii);
+        int last_ix = ii;
+        int c_index = __find(fstr, pat, pats, ii, &last_ix);
         if (c_index != -1)
         {
-            cmatch[matchno++] = c_index;
-            ii = c_index;
+            if (pat[0] != -1 && c_index > 0 && !(fstr[c_index - 1] == ' ' || fstr[c_index - 1] == '\n' || fstr[c_index - 1] == '\t'))
+            {
+                continue;
+            }
+            else if (pat[pats - 1] != -1 && last_ix < _dum_ && !(fstr[last_ix] == ' ' || fstr[last_ix] == '\n' || fstr[last_ix] == '\t'))
+            {
+                continue;
+            }
+            else
+            {
+                cmatch[matchno++] = c_index;
+                ii = c_index;
+            }
         }
     }
 
@@ -2306,11 +2374,23 @@ char *__specialFind(char *__file_path, char *pat_)
     int _dum_ = (int)strlen(str);
     for (int ii = 0; ii < _dum_; ii++)
     {
-        int c_index = __find(str, pat, pats, ii);
+        int last_ix = ii;
+        int c_index = __find(str, pat, pats, ii, &last_ix);
         if (c_index != -1)
         {
-            cmatch[matchno++] = c_index;
-            ii = c_index;
+            if (pat[0] != -1 && c_index > 0 && !(str[c_index - 1] == ' ' || str[c_index - 1] == '\n' || str[c_index - 1] == '\t'))
+            {
+                continue;
+            }
+            else if (pat[pats - 1] != -1 && last_ix < _dum_ && !(str[last_ix] == ' ' || str[last_ix] == '\n' || str[last_ix] == '\t'))
+            {
+                continue;
+            }
+            else
+            {
+                cmatch[matchno++] = c_index;
+                ii = c_index;
+            }
         }
     }
 
@@ -4142,7 +4222,7 @@ int main()
 {
     init();
 
-    char s[32768] = "insertstr --file /root/blah/j.txt --str test --pos 1:0";
+    char s[32768] = "find --str \"*a quote\" --file \"/root/this is a test filder/hi bruh.txt\"";
 
     printf(">>> ");
     gets(s);
