@@ -78,6 +78,30 @@ FILE *CLIPBOARD;
 FILE *OUTPUT;
 int currargc;
 
+/// @brief Changes output color to purple
+void __boldpurple__()
+{
+    printf("\033[1;35m");
+}
+
+/// @brief Resets output color
+void __reset__()
+{
+    printf("\033[0m");
+}
+
+/// @brief Changes output color to red
+void __red__()
+{
+    printf("\033[0;31m");
+}
+
+/// @brief Changes output color to red
+void __cyan__()
+{
+    printf("\033[0;36m");
+}
+
 /// @brief Checks wether a string is a number
 /// @param str string
 /// @return 1 if is number
@@ -196,6 +220,36 @@ void _showOutput()
     char c = fgetc(OUTPUT);
     while (c != EOF)
     {
+        if(c == '\n' || c == '\0' || c == EOF)
+        {
+            __reset__();
+        }
+
+        if(c == '~')
+        {
+            c = fgetc(OUTPUT);
+            if(c == '!')
+            {
+                __red__();
+                c = fgetc(OUTPUT);
+                continue;
+            }else if(c == '?')
+            {
+                __cyan__();
+                c = fgetc(OUTPUT);
+                continue;
+            }else if(c == '&')
+            {
+                __red__();
+                c = fgetc(OUTPUT);
+                continue;
+            }
+            else
+            {
+                printf("~");
+            }
+        }
+
         printf("%c", c);
         c = fgetc(OUTPUT);
     }
@@ -250,7 +304,7 @@ void __update(char *__file_path)
 
     if (i == -1 || !foundDot)
     {
-        _writeToOutput("ERROR: Invalid file name\n");
+        _writeToOutput("~!ERROR: Invalid file name\n");
         free(path);
         chdir(parentDir);
         return;
@@ -274,7 +328,7 @@ void __update(char *__file_path)
     {
         if (isFirst && strcmp(tok, "root"))
         {
-            _writeToOutput("ERROR: File should be in root folder\n");
+            _writeToOutput("~!ERROR: File should be in root folder\n");
             chdir(parentDir);
             return;
         }
@@ -293,9 +347,9 @@ void __update(char *__file_path)
 
     if (!__fileExists(filename))
     {
-        _writeToOutput("ERROR: File : ");
-        _writeToOutput(path);
-        _writeToOutput(" does not exist\n");
+        _writeToOutput("~!ERROR: File  ~?");
+        _writeToOutput(__file_path);
+        _writeToOutput(" ~&does not exist\n");
         free(path);
         chdir(parentDir);
         return;
@@ -678,7 +732,7 @@ void __originFileLen(char *__file_path, int *characters, int *lines, int *words)
 
     if (i == -1 || !foundDot)
     {
-        _writeToOutput("ERROR: Invalid file name\n\n");
+        _writeToOutput("~!ERROR: Invalid file name\n\n");
         free(path);
         chdir(parentDir);
         return;
@@ -702,7 +756,7 @@ void __originFileLen(char *__file_path, int *characters, int *lines, int *words)
     {
         if (isFirst && strcmp(tok, "root"))
         {
-            _writeToOutput("ERROR: File should be in root folder\n");
+            _writeToOutput("~!ERROR: File should be in root folder\n");
             chdir(parentDir);
             return;
         }
@@ -721,9 +775,9 @@ void __originFileLen(char *__file_path, int *characters, int *lines, int *words)
 
     if (!__fileExists(filename))
     {
-        _writeToOutput("ERROR: File ");
-        _writeToOutput(path);
-        _writeToOutput(" does not exist\n");
+        _writeToOutput("~!ERROR: File ~?");
+        _writeToOutput(__file_path);
+        _writeToOutput(" ~&does not exist\n");
         free(path);
         chdir(parentDir);
         return;
@@ -1138,7 +1192,7 @@ void createFile(char *__file_path)
 
     if (i == -1 || !foundDot)
     {
-        _writeToOutput("ERROR: Invalid file name\n");
+        _writeToOutput("~!ERROR: Invalid file name\n");
         free(path);
         chdir(parentDir);
         return;
@@ -1162,7 +1216,7 @@ void createFile(char *__file_path)
     {
         if (isFirst && strcmp(tok, "root"))
         {
-            _writeToOutput("ERROR: File should be created in root folder\n");
+            _writeToOutput("~!ERROR: File should be created in root folder\n");
             chdir(parentDir);
             return;
         }
@@ -1177,7 +1231,7 @@ void createFile(char *__file_path)
 
     if (__fileExists(filename))
     {
-        _writeToOutput("ERROR: File already exists\n");
+        _writeToOutput("~!ERROR: File already exists\n");
         free(path);
         chdir(parentDir);
         return;
@@ -1192,7 +1246,7 @@ void createFile(char *__file_path)
     }
     else
     {
-        _writeToOutput("ERROR: Could not create file\n");
+        _writeToOutput("~!ERROR: Could not create file\n");
     }
 
     chdir(parentDir);
@@ -1217,7 +1271,7 @@ int insertStr(char *__file_path, char *text, int row, int col)
 
     if (i == -1 || !foundDot)
     {
-        _writeToOutput("ERROR: Invalid file name\n");
+        _writeToOutput("~!ERROR: Invalid file name\n");
         chdir(parentDir);
         return 0;
     }
@@ -1240,7 +1294,7 @@ int insertStr(char *__file_path, char *text, int row, int col)
     {
         if (isFirst && strcmp(tok, "root"))
         {
-            _writeToOutput("ERROR: File should be in root folder\n");
+            _writeToOutput("~!ERROR: File should be in root folder\n");
             chdir(parentDir);
             return 0;
         }
@@ -1249,7 +1303,7 @@ int insertStr(char *__file_path, char *text, int row, int col)
 
         if (chdir(tok))
         {
-            _writeToOutput("ERROR: Invalid directory\n");
+            _writeToOutput("~!ERROR: Invalid directory\n");
             chdir(parentDir);
             return 0;
         }
@@ -1259,9 +1313,9 @@ int insertStr(char *__file_path, char *text, int row, int col)
 
     if (!__fileExists(filename))
     {
-        _writeToOutput("ERROR: File : ");
-        _writeToOutput(path);
-        _writeToOutput(" does not exist\n");
+        _writeToOutput("~!ERROR: File  ~?");
+        _writeToOutput(__file_path);
+        _writeToOutput(" ~&does not exist\n");
         chdir(parentDir);
         return 0;
     }
@@ -1316,11 +1370,11 @@ int insertStr(char *__file_path, char *text, int row, int col)
             {
                 fputs(line, nfp);
             }
-            
+
             r++;
         }
 
-        if(row == r && col == 0)
+        if (row == r && col == 0)
         {
             found = 1;
             fputs(text, nfp);
@@ -1350,7 +1404,7 @@ int insertStr(char *__file_path, char *text, int row, int col)
 
     if (!found)
     {
-        _writeToOutput("ERROR: Invalid position\n");
+        _writeToOutput("~!ERROR: Invalid position\n");
         return 0;
     }
 
@@ -1374,7 +1428,7 @@ void cat(char *__file_path)
 
     if (i == -1 || !foundDot)
     {
-        _writeToOutput("ERROR: Invalid file name\n");
+        _writeToOutput("~!ERROR: Invalid file name\n");
         free(path);
         chdir(parentDir);
         return;
@@ -1398,7 +1452,7 @@ void cat(char *__file_path)
     {
         if (isFirst && strcmp(tok, "root"))
         {
-            _writeToOutput("ERROR: File should be in root folder\n");
+            _writeToOutput("~!ERROR: File should be in root folder\n");
             chdir(parentDir);
             return;
         }
@@ -1407,7 +1461,7 @@ void cat(char *__file_path)
 
         if (chdir(tok))
         {
-            _writeToOutput("ERROR: Invalid directory\n");
+            _writeToOutput("~!ERROR: Invalid directory\n");
             chdir(parentDir);
             return;
         }
@@ -1417,9 +1471,9 @@ void cat(char *__file_path)
 
     if (!__fileExists(filename))
     {
-        _writeToOutput("ERROR: File ");
-        _writeToOutput(path);
-        _writeToOutput(" does not exist\n");
+        _writeToOutput("~!ERROR: File ~?");
+        _writeToOutput(__file_path);
+        _writeToOutput(" ~&does not exist\n");
         free(path);
         chdir(parentDir);
         return;
@@ -1469,7 +1523,7 @@ int removeStr(char *__file_path, int row, int col, int count, int forward)
 
     if (i == -1 || !foundDot)
     {
-        _writeToOutput("ERROR: Invalid file name\n");
+        _writeToOutput("~!ERROR: Invalid file name\n");
         chdir(parentDir);
         return 0;
     }
@@ -1492,7 +1546,7 @@ int removeStr(char *__file_path, int row, int col, int count, int forward)
     {
         if (isFirst && strcmp(tok, "root"))
         {
-            _writeToOutput("ERROR: File should be in root folder\n");
+            _writeToOutput("~!ERROR: File should be in root folder\n");
             chdir(parentDir);
             return 0;
         }
@@ -1501,7 +1555,7 @@ int removeStr(char *__file_path, int row, int col, int count, int forward)
 
         if (chdir(tok))
         {
-            _writeToOutput("ERROR: Invalid directory\n");
+            _writeToOutput("~!ERROR: Invalid directory\n");
             chdir(parentDir);
             return 0;
         }
@@ -1511,9 +1565,9 @@ int removeStr(char *__file_path, int row, int col, int count, int forward)
 
     if (!__fileExists(filename))
     {
-        _writeToOutput("ERROR: File : ");
-        _writeToOutput(path);
-        _writeToOutput(" does not exist\n");
+        _writeToOutput("~!ERROR: File  ~?");
+        _writeToOutput(__file_path);
+        _writeToOutput(" ~&does not exist\n");
         chdir(parentDir);
         return 0;
     }
@@ -1549,7 +1603,7 @@ int removeStr(char *__file_path, int row, int col, int count, int forward)
 
     if (ix == -1)
     {
-        _writeToOutput("ERROR: Invalid position\n");
+        _writeToOutput("~!ERROR: Invalid position\n");
         fclose(fp);
         fclose(nfp);
         free(line);
@@ -1560,7 +1614,7 @@ int removeStr(char *__file_path, int row, int col, int count, int forward)
 
     if (e_ix < 0 || e_ix >= chars)
     {
-        _writeToOutput("ERROR: Invalid count\n");
+        _writeToOutput("~!ERROR: Invalid count\n");
         fclose(fp);
         fclose(nfp);
         free(line);
@@ -1629,7 +1683,7 @@ int copyStr(char *__file_path, int row, int col, int count, int forward)
 
     if (i == -1 || !foundDot)
     {
-        _writeToOutput("ERROR: Invalid file name\n");
+        _writeToOutput("~!ERROR: Invalid file name\n");
         chdir(parentDir);
         return 0;
     }
@@ -1652,7 +1706,7 @@ int copyStr(char *__file_path, int row, int col, int count, int forward)
     {
         if (isFirst && strcmp(tok, "root"))
         {
-            _writeToOutput("ERROR: File should be in root folder\n");
+            _writeToOutput("~!ERROR: File should be in root folder\n");
             chdir(parentDir);
             return 0;
         }
@@ -1661,7 +1715,7 @@ int copyStr(char *__file_path, int row, int col, int count, int forward)
 
         if (chdir(tok))
         {
-            _writeToOutput("ERROR: Invalid directory\n");
+            _writeToOutput("~!ERROR: Invalid directory\n");
             chdir(parentDir);
             return 0;
         }
@@ -1671,9 +1725,9 @@ int copyStr(char *__file_path, int row, int col, int count, int forward)
 
     if (!__fileExists(filename))
     {
-        _writeToOutput("ERROR: File : ");
-        _writeToOutput(path);
-        _writeToOutput(" does not exist\n");
+        _writeToOutput("~!ERROR: File  ~?");
+        _writeToOutput(__file_path);
+        _writeToOutput(" ~&does not exist\n");
         chdir(parentDir);
         return 0;
     }
@@ -1714,7 +1768,7 @@ int copyStr(char *__file_path, int row, int col, int count, int forward)
 
     if (ix == -1)
     {
-        _writeToOutput("ERROR: Invalid position\n");
+        _writeToOutput("~!ERROR: Invalid position\n");
         fclose(fp);
         fclose(nfp);
         fclose(cfp);
@@ -1726,7 +1780,7 @@ int copyStr(char *__file_path, int row, int col, int count, int forward)
 
     if (e_ix < 0 || e_ix >= chars)
     {
-        _writeToOutput("ERROR: Invalid count\n");
+        _writeToOutput("~!ERROR: Invalid count\n");
         fclose(fp);
         fclose(nfp);
         fclose(cfp);
@@ -1805,7 +1859,7 @@ int cutStr(char *__file_path, int row, int col, int count, int forward)
 
     if (i == -1 || !foundDot)
     {
-        _writeToOutput("ERROR: Invalid file name\n");
+        _writeToOutput("~!ERROR: Invalid file name\n");
         chdir(parentDir);
         return 0;
     }
@@ -1828,7 +1882,7 @@ int cutStr(char *__file_path, int row, int col, int count, int forward)
     {
         if (isFirst && strcmp(tok, "root"))
         {
-            _writeToOutput("ERROR: File should be in root folder\n");
+            _writeToOutput("~!ERROR: File should be in root folder\n");
             chdir(parentDir);
             return 0;
         }
@@ -1837,7 +1891,7 @@ int cutStr(char *__file_path, int row, int col, int count, int forward)
 
         if (chdir(tok))
         {
-            _writeToOutput("ERROR: Invalid directory\n");
+            _writeToOutput("~!ERROR: Invalid directory\n");
             chdir(parentDir);
             return 0;
         }
@@ -1847,9 +1901,9 @@ int cutStr(char *__file_path, int row, int col, int count, int forward)
 
     if (!__fileExists(filename))
     {
-        _writeToOutput("ERROR: File : ");
-        _writeToOutput(path);
-        _writeToOutput(" does not exist\n");
+        _writeToOutput("~!ERROR: File  ~?");
+        _writeToOutput(__file_path);
+        _writeToOutput(" ~&does not exist\n");
         chdir(parentDir);
         return 0;
     }
@@ -1890,7 +1944,7 @@ int cutStr(char *__file_path, int row, int col, int count, int forward)
 
     if (ix == -1)
     {
-        _writeToOutput("ERROR: Invalid position\n");
+        _writeToOutput("~!ERROR: Invalid position\n");
         fclose(fp);
         fclose(nfp);
         fclose(cfp);
@@ -1902,7 +1956,7 @@ int cutStr(char *__file_path, int row, int col, int count, int forward)
 
     if (e_ix < 0 || e_ix >= chars)
     {
-        _writeToOutput("ERROR: Invalid count\n");
+        _writeToOutput("~!ERROR: Invalid count\n");
         fclose(fp);
         fclose(nfp);
         fclose(cfp);
@@ -1999,7 +2053,7 @@ int crazy_find(char *__file_path, char *pat_)
 
     if (i == -1 || !foundDot)
     {
-        _writeToOutput("ERROR: Invalid file name\n");
+        _writeToOutput("~!ERROR: Invalid file name\n");
         chdir(parentDir);
         return 0;
     }
@@ -2022,7 +2076,7 @@ int crazy_find(char *__file_path, char *pat_)
     {
         if (isFirst && strcmp(tok, "root"))
         {
-            _writeToOutput("ERROR: File should be in root folder\n");
+            _writeToOutput("~!ERROR: File should be in root folder\n");
             chdir(parentDir);
             return 0;
         }
@@ -2031,7 +2085,7 @@ int crazy_find(char *__file_path, char *pat_)
 
         if (chdir(tok))
         {
-            _writeToOutput("ERROR: Invalid directory\n");
+            _writeToOutput("~!ERROR: Invalid directory\n");
             chdir(parentDir);
             return 0;
         }
@@ -2041,9 +2095,9 @@ int crazy_find(char *__file_path, char *pat_)
 
     if (!__fileExists(filename))
     {
-        _writeToOutput("ERROR: File : ");
-        _writeToOutput(path);
-        _writeToOutput(" does not exist\n");
+        _writeToOutput("~!ERROR: File  ~?");
+        _writeToOutput(__file_path);
+        _writeToOutput(" ~&does not exist\n");
         chdir(parentDir);
         return 0;
     }
@@ -2056,7 +2110,7 @@ int crazy_find(char *__file_path, char *pat_)
     short *pat = __toPat(pat_, &pats);
     if ((pats == 1 && pat[0] == -1) || (pats == 2 && pat[0] == -1 && pat[1] == -1))
     {
-        _writeToOutput("ERROR: Invalid regex\n");
+        _writeToOutput("~!ERROR: Invalid regex\n");
         return 0;
     }
 
@@ -2091,7 +2145,6 @@ int crazy_find(char *__file_path, char *pat_)
     return matchno ? 1 : 0;
 }
 
-
 /// @brief Finds a pattern in the file
 /// @param __file_path file name
 /// @param pat_ pattern to be matched
@@ -2106,7 +2159,7 @@ int find(char *__file_path, char *pat_, int f_type, int at)
     // Errors
     if ((f_type & (ALL & AT)) || (f_type & (ALL & COUNT)) || (f_type & (AT & COUNT)) || ((f_type & AT) && at < 0))
     {
-        _writeToOutput("ERROR: wrong input\n");
+        _writeToOutput("~!ERROR: wrong input\n");
         return 0;
     }
 
@@ -2118,7 +2171,7 @@ int find(char *__file_path, char *pat_, int f_type, int at)
 
     if (i == -1 || !foundDot)
     {
-        _writeToOutput("ERROR: Invalid file name\n");
+        _writeToOutput("~!ERROR: Invalid file name\n");
         chdir(parentDir);
         return 0;
     }
@@ -2141,7 +2194,7 @@ int find(char *__file_path, char *pat_, int f_type, int at)
     {
         if (isFirst && strcmp(tok, "root"))
         {
-            _writeToOutput("ERROR: File should be in root folder\n");
+            _writeToOutput("~!ERROR: File should be in root folder\n");
             chdir(parentDir);
             return 0;
         }
@@ -2150,7 +2203,7 @@ int find(char *__file_path, char *pat_, int f_type, int at)
 
         if (chdir(tok))
         {
-            _writeToOutput("ERROR: Invalid directory\n");
+            _writeToOutput("~!ERROR: Invalid directory\n");
             chdir(parentDir);
             return 0;
         }
@@ -2160,9 +2213,9 @@ int find(char *__file_path, char *pat_, int f_type, int at)
 
     if (!__fileExists(filename))
     {
-        _writeToOutput("ERROR: File : ");
-        _writeToOutput(path);
-        _writeToOutput(" does not exist\n");
+        _writeToOutput("~!ERROR: File  ~?");
+        _writeToOutput(__file_path);
+        _writeToOutput(" ~&does not exist\n");
         chdir(parentDir);
         return 0;
     }
@@ -2175,7 +2228,7 @@ int find(char *__file_path, char *pat_, int f_type, int at)
     short *pat = __toPat(pat_, &pats);
     if ((pats == 1 && pat[0] == -1) || (pats == 2 && pat[0] == -1 && pat[1] == -1))
     {
-        _writeToOutput("ERROR: Invalid regex\n");
+        _writeToOutput("~!ERROR: Invalid regex\n");
         return 0;
     }
 
@@ -2286,7 +2339,7 @@ int replace(char *__file_path, char *str, char *fill, int at)
     // Errors
     if (at < -1)
     {
-        _writeToOutput("ERROR: wrong input\n");
+        _writeToOutput("~!ERROR: wrong input\n");
         return 0;
     }
 
@@ -2298,7 +2351,7 @@ int replace(char *__file_path, char *str, char *fill, int at)
 
     if (i == -1 || !foundDot)
     {
-        _writeToOutput("ERROR: Invalid file name\n");
+        _writeToOutput("~!ERROR: Invalid file name\n");
         chdir(parentDir);
         return 0;
     }
@@ -2321,7 +2374,7 @@ int replace(char *__file_path, char *str, char *fill, int at)
     {
         if (isFirst && strcmp(tok, "root"))
         {
-            _writeToOutput("ERROR: File should be in root folder\n");
+            _writeToOutput("~!ERROR: File should be in root folder\n");
             chdir(parentDir);
             return 0;
         }
@@ -2330,7 +2383,7 @@ int replace(char *__file_path, char *str, char *fill, int at)
 
         if (chdir(tok))
         {
-            _writeToOutput("ERROR: Invalid directory\n");
+            _writeToOutput("~!ERROR: Invalid directory\n");
             chdir(parentDir);
             return 0;
         }
@@ -2340,9 +2393,9 @@ int replace(char *__file_path, char *str, char *fill, int at)
 
     if (!__fileExists(filename))
     {
-        _writeToOutput("ERROR: File : ");
-        _writeToOutput(path);
-        _writeToOutput(" does not exist\n");
+        _writeToOutput("~!ERROR: File  ~?");
+        _writeToOutput(__file_path);
+        _writeToOutput(" ~&does not exist\n");
         chdir(parentDir);
         return 0;
     }
@@ -2355,7 +2408,7 @@ int replace(char *__file_path, char *str, char *fill, int at)
     short *pat = __toPat(str, &pats);
     if ((pats == 1 && pat[0] == -1) || (pats == 2 && pat[0] == -1 && pat[1] == -1))
     {
-        _writeToOutput("ERROR: Invalid regex\n");
+        _writeToOutput("~!ERROR: Invalid regex\n");
         fclose(fp);
         free(fp);
         chdir(parentDir);
@@ -2396,7 +2449,7 @@ int replace(char *__file_path, char *str, char *fill, int at)
 
     if ((purelen == 1 && ppat[0] == -1) || (purelen == 2 && ppat[0] == -1 && ppat[1] == -1))
     {
-        _writeToOutput("ERROR: Invalid regex\n");
+        _writeToOutput("~!ERROR: Invalid regex\n");
         free(fp);
         chdir(parentDir);
         return 0;
@@ -2474,7 +2527,7 @@ char *__specialFind(char *__file_path, char *pat_)
 
     if (i == -1 || !foundDot)
     {
-        _writeToOutput("ERROR: Invalid file name\n");
+        _writeToOutput("~!ERROR: Invalid file name\n");
         chdir(parentDir);
         return "-1";
     }
@@ -2497,7 +2550,7 @@ char *__specialFind(char *__file_path, char *pat_)
     {
         if (isFirst && strcmp(tok, "root"))
         {
-            _writeToOutput("ERROR: File should be in root folder\n");
+            _writeToOutput("~!ERROR: File should be in root folder\n");
             chdir(parentDir);
             return "-1";
         }
@@ -2506,7 +2559,7 @@ char *__specialFind(char *__file_path, char *pat_)
 
         if (chdir(tok))
         {
-            _writeToOutput("ERROR: Invalid directory\n");
+            _writeToOutput("~!ERROR: Invalid directory\n");
             chdir(parentDir);
             return "-1";
         }
@@ -2516,9 +2569,9 @@ char *__specialFind(char *__file_path, char *pat_)
 
     if (!__fileExists(filename))
     {
-        _writeToOutput("ERROR: File : ");
-        _writeToOutput(path);
-        _writeToOutput(" does not exist\n");
+        _writeToOutput("~!ERROR: File  ~?");
+        _writeToOutput(__file_path);
+        _writeToOutput(" ~&does not exist\n");
         chdir(parentDir);
         return "-1";
     }
@@ -2533,7 +2586,7 @@ char *__specialFind(char *__file_path, char *pat_)
     short *pat = __toPat(pat_, &pats);
     if ((pats == 1 && pat[0] == -1) || (pats == 2 && pat[0] == -1 && pat[1] == -1))
     {
-        _writeToOutput("ERROR: Invalid regex\n");
+        _writeToOutput("~!ERROR: Invalid regex\n");
         chdir(parentDir);
         return "-1";
     }
@@ -2564,7 +2617,7 @@ char *__specialFind(char *__file_path, char *pat_)
         }
     }
 
-    if(!matchno)
+    if (!matchno)
     {
         chdir(parentDir);
         return "-1";
@@ -2671,7 +2724,7 @@ void undo(char *__file_path)
 
     if (i == -1 || !foundDot)
     {
-        _writeToOutput("ERROR: Invalid file name\n");
+        _writeToOutput("~!ERROR: Invalid file name\n");
         free(path);
         chdir(parentDir);
         return;
@@ -2695,7 +2748,7 @@ void undo(char *__file_path)
     {
         if (isFirst && strcmp(tok, "root"))
         {
-            _writeToOutput("ERROR: File should be in root folder\n");
+            _writeToOutput("~!ERROR: File should be in root folder\n");
             chdir(parentDir);
             return;
         }
@@ -2704,7 +2757,7 @@ void undo(char *__file_path)
 
         if (chdir(tok))
         {
-            _writeToOutput("ERROR: Invalid directory\n");
+            _writeToOutput("~!ERROR: Invalid directory\n");
             chdir(parentDir);
             return;
         }
@@ -2714,9 +2767,9 @@ void undo(char *__file_path)
 
     if (!__fileExists(filename))
     {
-        _writeToOutput("ERROR: File : ");
-        _writeToOutput(path);
-        _writeToOutput(" does not exist\n");
+        _writeToOutput("~!ERROR: File  ~?");
+        _writeToOutput(__file_path);
+        _writeToOutput(" ~&does not exist\n");
         free(path);
         chdir(parentDir);
         return;
@@ -2724,7 +2777,7 @@ void undo(char *__file_path)
 
     if (!__fileExists(__undoPath(filename)))
     {
-        _writeToOutput("ERROR: No undo available\n");
+        _writeToOutput("~!ERROR: No undo available\n");
         free(path);
         chdir(parentDir);
         return;
@@ -2779,7 +2832,7 @@ int autoIndent(char *__file_path)
 
     if (i == -1 || !foundDot)
     {
-        _writeToOutput("ERROR: Invalid file name\n");
+        _writeToOutput("~!ERROR: Invalid file name\n");
         chdir(parentDir);
         return 0;
     }
@@ -2802,7 +2855,7 @@ int autoIndent(char *__file_path)
     {
         if (isFirst && strcmp(tok, "root"))
         {
-            _writeToOutput("ERROR: File should be in root folder\n");
+            _writeToOutput("~!ERROR: File should be in root folder\n");
             chdir(parentDir);
             return 0;
         }
@@ -2811,7 +2864,7 @@ int autoIndent(char *__file_path)
 
         if (chdir(tok))
         {
-            _writeToOutput("ERROR: Invalid directory\n");
+            _writeToOutput("~!ERROR: Invalid directory\n");
             chdir(parentDir);
             return 0;
         }
@@ -2821,9 +2874,9 @@ int autoIndent(char *__file_path)
 
     if (!__fileExists(filename))
     {
-        _writeToOutput("ERROR: File : ");
-        _writeToOutput(path);
-        _writeToOutput(" does not exist\n");
+        _writeToOutput("~!ERROR: File  ~?");
+        _writeToOutput(__file_path);
+        _writeToOutput(" ~&does not exist\n");
         chdir(parentDir);
         return 0;
     }
@@ -3240,7 +3293,7 @@ void compareFiles(char *this_path, char *that_path)
 
     if (i == -1 || !foundDot)
     {
-        _writeToOutput("ERROR: Invalid file name\n");
+        _writeToOutput("~!ERROR: Invalid file name\n");
         free(path);
         chdir(parentDir);
         return;
@@ -3264,7 +3317,7 @@ void compareFiles(char *this_path, char *that_path)
     {
         if (isFirst && strcmp(tok, "root"))
         {
-            _writeToOutput("ERROR: File should be in root folder\n");
+            _writeToOutput("~!ERROR: File should be in root folder\n");
             chdir(parentDir);
             return;
         }
@@ -3273,7 +3326,7 @@ void compareFiles(char *this_path, char *that_path)
 
         if (chdir(tok))
         {
-            _writeToOutput("ERROR: Invalid directory\n");
+            _writeToOutput("~!ERROR: Invalid directory\n");
             chdir(parentDir);
             return;
         }
@@ -3283,9 +3336,9 @@ void compareFiles(char *this_path, char *that_path)
 
     if (!__fileExists(filename))
     {
-        _writeToOutput("ERROR: File : ");
-        _writeToOutput(path);
-        _writeToOutput(" does not exist\n");
+        _writeToOutput("~!ERROR: File  ~?");
+        _writeToOutput(this_path);
+        _writeToOutput(" ~&does not exist\n");
         free(path);
         chdir(parentDir);
         return;
@@ -3305,7 +3358,7 @@ void compareFiles(char *this_path, char *that_path)
 
     if (pi == -1 || !pfoundDot)
     {
-        _writeToOutput("ERROR: Invalid file name\n");
+        _writeToOutput("~!ERROR: Invalid file name\n");
         free(path);
         chdir(parentDir);
         return;
@@ -3329,7 +3382,7 @@ void compareFiles(char *this_path, char *that_path)
     {
         if (pisFirst && strcmp(ptok, "root"))
         {
-            _writeToOutput("ERROR: File should be in root folder\n");
+            _writeToOutput("~!ERROR: File should be in root folder\n");
             chdir(parentDir);
             return;
         }
@@ -3338,7 +3391,7 @@ void compareFiles(char *this_path, char *that_path)
 
         if (chdir(ptok))
         {
-            _writeToOutput("ERROR: Invalid directory\n");
+            _writeToOutput("~!ERROR: Invalid directory\n");
             chdir(parentDir);
             return;
         }
@@ -3348,9 +3401,9 @@ void compareFiles(char *this_path, char *that_path)
 
     if (!__fileExists(pfilename))
     {
-        _writeToOutput("ERROR: File : ");
-        _writeToOutput(ppath);
-        _writeToOutput(" does not exist\n");
+        _writeToOutput("~!ERROR: File  ~?");
+        _writeToOutput(that_path);
+        _writeToOutput(" ~&does not exist\n");
         free(path);
         chdir(parentDir);
         return;
@@ -3527,7 +3580,7 @@ void arman(char *inp, char *str)
 
         if (currarglen >= 32768)
         {
-            _writeToOutput("ERROR: Argument size exceeded (32768 characters)\n");
+            _writeToOutput("~!ERROR: Argument size exceeded (32768 characters)\n");
             return;
         }
     }
@@ -3566,13 +3619,13 @@ void arman(char *inp, char *str)
 
         if (argc != 5 || strcmp(arg[1], "--file") || strcmp(arg[3], "--pos"))
         {
-            _writeToOutput("ERROR: Invalid command\n");
+            _writeToOutput("~!ERROR: Invalid command\n");
             return;
         }
 
         if (sscanf(arg[4], "%d:%d", &lineno, &startpos) != 2)
         {
-            _writeToOutput("ERROR: Invalid command\n");
+            _writeToOutput("~!ERROR: Invalid command\n");
             return;
         }
 
@@ -3587,7 +3640,7 @@ void arman(char *inp, char *str)
         {
             if (strcmp(arg[1], "--file"))
             {
-                _writeToOutput("ERROR: Invalid command\n");
+                _writeToOutput("~!ERROR: Invalid command\n");
                 return;
             }
 
@@ -3617,14 +3670,14 @@ void arman(char *inp, char *str)
                 }
                 else
                 {
-                    _writeToOutput("ERROR: Invalid command\n");
+                    _writeToOutput("~!ERROR: Invalid command\n");
                     return;
                 }
             }
 
             if (byword > 1 || at > 1 || count > 1 || all > 1 || (at == 1 && atnum == -1))
             {
-                _writeToOutput("ERROR: Invalid command\n");
+                _writeToOutput("~!ERROR: Invalid command\n");
                 return;
             }
 
@@ -3638,7 +3691,7 @@ void arman(char *inp, char *str)
         }
         else
         {
-            _writeToOutput("ERROR: Invalid command\n");
+            _writeToOutput("~!ERROR: Invalid command\n");
             return;
         }
 
@@ -3650,7 +3703,7 @@ void arman(char *inp, char *str)
         {
             if ((strcmp(arg[1], "--str1") && strcmp(arg[1], "--str2")) || strcmp(arg[3], "--file"))
             {
-                _writeToOutput("ERROR: Invalid command\n");
+                _writeToOutput("~!ERROR: Invalid command\n");
                 return;
             }
 
@@ -3681,7 +3734,7 @@ void arman(char *inp, char *str)
                 }
                 else
                 {
-                    _writeToOutput("ERROR: Invalid command\n");
+                    _writeToOutput("~!ERROR: Invalid command\n");
                     return;
                 }
             }
@@ -3700,19 +3753,19 @@ void arman(char *inp, char *str)
                 }
                 else
                 {
-                    _writeToOutput("ERROR: Invalid command\n");
+                    _writeToOutput("~!ERROR: Invalid command\n");
                     return;
                 }
             }
             else
             {
-                _writeToOutput("ERROR: Invalid command\n");
+                _writeToOutput("~!ERROR: Invalid command\n");
                 return;
             }
         }
         else
         {
-            _writeToOutput("ERROR: Invalid command\n");
+            _writeToOutput("~!ERROR: Invalid command\n");
             return;
         }
 
@@ -3726,7 +3779,7 @@ void arman(char *inp, char *str)
             {
                 if (strcmp(arg[2], "--files"))
                 {
-                    _writeToOutput("ERROR: Invalid command\n");
+                    _writeToOutput("~!ERROR: Invalid command\n");
                     return;
                 }
                 else
@@ -3744,7 +3797,7 @@ void arman(char *inp, char *str)
             {
                 if (strcmp(arg[1], "--files"))
                 {
-                    _writeToOutput("ERROR: Invalid command\n");
+                    _writeToOutput("~!ERROR: Invalid command\n");
                     return;
                 }
                 else
@@ -3761,7 +3814,7 @@ void arman(char *inp, char *str)
         }
         else
         {
-            _writeToOutput("ERROR: Invalid command\n");
+            _writeToOutput("~!ERROR: Invalid command\n");
             return;
         }
 
@@ -3769,13 +3822,13 @@ void arman(char *inp, char *str)
 
     case INVALID:
 
-        _writeToOutput("ERROR: Invalid command\n");
+        _writeToOutput("~!ERROR: Invalid command\n");
         return;
 
         break;
 
     default:
-        _writeToOutput("ERROR: Invalid command\n");
+        _writeToOutput("~!ERROR: Invalid command\n");
         return;
 
         break;
@@ -3889,7 +3942,7 @@ void handler(char *inp)
 
         if (currarglen >= 32768)
         {
-            _writeToOutput("ERROR: Argument size exceeded (32768 characters)\n");
+            _writeToOutput("~!ERROR: Argument size exceeded (32768 characters)\n");
             return;
         }
     }
@@ -3928,7 +3981,7 @@ void handler(char *inp)
 
         if (argc != 3 || strcmp(arg[1], "--file"))
         {
-            _writeToOutput("ERROR: Invalid command\n");
+            _writeToOutput("~!ERROR: Invalid command\n");
             return;
         }
 
@@ -3940,13 +3993,13 @@ void handler(char *inp)
 
         if (argc != 7 || strcmp(arg[1], "--file") || strcmp(arg[3], "--str") || strcmp(arg[5], "--pos"))
         {
-            _writeToOutput("ERROR: Invalid command\n");
+            _writeToOutput("~!ERROR: Invalid command\n");
             return;
         }
 
         if (sscanf(arg[6], "%d:%d", &lineno, &startpos) != 2)
         {
-            _writeToOutput("ERROR: Invalid command\n");
+            _writeToOutput("~!ERROR: Invalid command\n");
             return;
         }
 
@@ -3959,7 +4012,7 @@ void handler(char *inp)
 
         if (argc != 3 || strcmp(arg[1], "--file"))
         {
-            _writeToOutput("ERROR: Invalid command\n");
+            _writeToOutput("~!ERROR: Invalid command\n");
             return;
         }
 
@@ -3971,19 +4024,19 @@ void handler(char *inp)
 
         if (argc != 8 || strcmp(arg[1], "--file") || strcmp(arg[3], "--pos") || strcmp(arg[5], "-size"))
         {
-            _writeToOutput("ERROR: Invalid command\n");
+            _writeToOutput("~!ERROR: Invalid command\n");
             return;
         }
 
         if (sscanf(arg[4], "%d:%d", &lineno, &startpos) != 2)
         {
-            _writeToOutput("ERROR: Invalid command\n");
+            _writeToOutput("~!ERROR: Invalid command\n");
             return;
         }
 
         if (sscanf(arg[6], "%d", &cnt) != 1)
         {
-            _writeToOutput("ERROR: Invalid command\n");
+            _writeToOutput("~!ERROR: Invalid command\n");
             return;
         }
 
@@ -3997,7 +4050,7 @@ void handler(char *inp)
         }
         else
         {
-            _writeToOutput("ERROR: Invalid command\n");
+            _writeToOutput("~!ERROR: Invalid command\n");
             return;
         }
 
@@ -4010,19 +4063,19 @@ void handler(char *inp)
 
         if (argc != 8 || strcmp(arg[1], "--file") || strcmp(arg[3], "--pos") || strcmp(arg[5], "-size"))
         {
-            _writeToOutput("ERROR: Invalid command\n");
+            _writeToOutput("~!ERROR: Invalid command\n");
             return;
         }
 
         if (sscanf(arg[4], "%d:%d", &lineno, &startpos) != 2)
         {
-            _writeToOutput("ERROR: Invalid command\n");
+            _writeToOutput("~!ERROR: Invalid command\n");
             return;
         }
 
         if (sscanf(arg[6], "%d", &cnt) != 1)
         {
-            _writeToOutput("ERROR: Invalid command\n");
+            _writeToOutput("~!ERROR: Invalid command\n");
             return;
         }
 
@@ -4036,7 +4089,7 @@ void handler(char *inp)
         }
         else
         {
-            _writeToOutput("ERROR: Invalid command\n");
+            _writeToOutput("~!ERROR: Invalid command\n");
             return;
         }
 
@@ -4048,19 +4101,19 @@ void handler(char *inp)
 
         if (argc != 8 || strcmp(arg[1], "--file") || strcmp(arg[3], "--pos") || strcmp(arg[5], "-size"))
         {
-            _writeToOutput("ERROR: Invalid command\n");
+            _writeToOutput("~!ERROR: Invalid command\n");
             return;
         }
 
         if (sscanf(arg[4], "%d:%d", &lineno, &startpos) != 2)
         {
-            _writeToOutput("ERROR: Invalid command\n");
+            _writeToOutput("~!ERROR: Invalid command\n");
             return;
         }
 
         if (sscanf(arg[6], "%d", &cnt) != 1)
         {
-            _writeToOutput("ERROR: Invalid command\n");
+            _writeToOutput("~!ERROR: Invalid command\n");
             return;
         }
 
@@ -4074,7 +4127,7 @@ void handler(char *inp)
         }
         else
         {
-            _writeToOutput("ERROR: Invalid command\n");
+            _writeToOutput("~!ERROR: Invalid command\n");
             return;
         }
 
@@ -4087,13 +4140,13 @@ void handler(char *inp)
 
         if (argc != 5 || strcmp(arg[1], "--file") || strcmp(arg[3], "--pos"))
         {
-            _writeToOutput("ERROR: Invalid command\n");
+            _writeToOutput("~!ERROR: Invalid command\n");
             return;
         }
 
         if (sscanf(arg[4], "%d:%d", &lineno, &startpos) != 2)
         {
-            _writeToOutput("ERROR: Invalid command\n");
+            _writeToOutput("~!ERROR: Invalid command\n");
             return;
         }
 
@@ -4108,7 +4161,7 @@ void handler(char *inp)
         {
             if (strcmp(arg[1], "--str") || strcmp(arg[3], "--file"))
             {
-                _writeToOutput("ERROR: Invalid command\n");
+                _writeToOutput("~!ERROR: Invalid command\n");
                 return;
             }
 
@@ -4138,14 +4191,14 @@ void handler(char *inp)
                 }
                 else
                 {
-                    _writeToOutput("ERROR: Invalid command\n");
+                    _writeToOutput("~!ERROR: Invalid command\n");
                     return;
                 }
             }
 
             if (byword > 1 || at > 1 || count > 1 || all > 1 || (at == 1 && atnum == -1))
             {
-                _writeToOutput("ERROR: Invalid command\n");
+                _writeToOutput("~!ERROR: Invalid command\n");
                 return;
             }
 
@@ -4159,7 +4212,7 @@ void handler(char *inp)
         }
         else
         {
-            _writeToOutput("ERROR: Invalid command\n");
+            _writeToOutput("~!ERROR: Invalid command\n");
             return;
         }
 
@@ -4171,7 +4224,7 @@ void handler(char *inp)
         {
             if (strcmp(arg[1], "--str1") || strcmp(arg[3], "--str2") || strcmp(arg[5], "--file"))
             {
-                _writeToOutput("ERROR: Invalid command\n");
+                _writeToOutput("~!ERROR: Invalid command\n");
                 return;
             }
 
@@ -4189,7 +4242,7 @@ void handler(char *inp)
                 }
                 else
                 {
-                    _writeToOutput("ERROR: Invalid command\n");
+                    _writeToOutput("~!ERROR: Invalid command\n");
                     return;
                 }
             }
@@ -4202,19 +4255,19 @@ void handler(char *inp)
                 }
                 else
                 {
-                    _writeToOutput("ERROR: Invalid command\n");
+                    _writeToOutput("~!ERROR: Invalid command\n");
                     return;
                 }
             }
             else
             {
-                _writeToOutput("ERROR: Invalid command\n");
+                _writeToOutput("~!ERROR: Invalid command\n");
                 return;
             }
         }
         else
         {
-            _writeToOutput("ERROR: Invalid command\n");
+            _writeToOutput("~!ERROR: Invalid command\n");
             return;
         }
 
@@ -4228,7 +4281,7 @@ void handler(char *inp)
             {
                 if (strcmp(arg[3], "--files"))
                 {
-                    _writeToOutput("ERROR: Invalid command\n");
+                    _writeToOutput("~!ERROR: Invalid command\n");
                     return;
                 }
                 else
@@ -4246,7 +4299,7 @@ void handler(char *inp)
             {
                 if (strcmp(arg[4], "--files"))
                 {
-                    _writeToOutput("ERROR: Invalid command\n");
+                    _writeToOutput("~!ERROR: Invalid command\n");
                     return;
                 }
                 else
@@ -4262,13 +4315,13 @@ void handler(char *inp)
             }
             else
             {
-                _writeToOutput("ERROR: Invalid command\n");
+                _writeToOutput("~!ERROR: Invalid command\n");
                 return;
             }
         }
         else
         {
-            _writeToOutput("ERROR: Invalid command\n");
+            _writeToOutput("~!ERROR: Invalid command\n");
             return;
         }
 
@@ -4278,7 +4331,7 @@ void handler(char *inp)
 
         if (argc != 3 || strcmp(arg[1], "--file"))
         {
-            _writeToOutput("ERROR: Invalid command\n");
+            _writeToOutput("~!ERROR: Invalid command\n");
             return;
         }
 
@@ -4290,7 +4343,7 @@ void handler(char *inp)
 
         if (argc != 2)
         {
-            _writeToOutput("ERROR: Invalid command\n");
+            _writeToOutput("~!ERROR: Invalid command\n");
             return;
         }
 
@@ -4303,7 +4356,7 @@ void handler(char *inp)
 
         if (argc != 3)
         {
-            _writeToOutput("ERROR: Invalid command\n");
+            _writeToOutput("~!ERROR: Invalid command\n");
             return;
         }
 
@@ -4315,7 +4368,7 @@ void handler(char *inp)
 
         if (argc != 2)
         {
-            _writeToOutput("ERROR: Invalid command\n");
+            _writeToOutput("~!ERROR: Invalid command\n");
             return;
         }
 
@@ -4325,7 +4378,7 @@ void handler(char *inp)
 
     case INVALID:
 
-        _writeToOutput("ERROR: Invalid command\n");
+        _writeToOutput("~!ERROR: Invalid command\n");
         return;
 
         break;
@@ -4340,8 +4393,8 @@ void Handler(char *inp)
     chdir(parentDir);
     int n = strlen(inp);
 
-    FILE *firstf = fopen("first.first", "w");
-    FILE *secondf = fopen("second.second", "w");
+    FILE *firstf = fopen(".first.first", "w");
+    FILE *secondf = fopen(".second.second", "w");
 
     int inquote = 0;
     int isarman = 0;
@@ -4381,8 +4434,8 @@ void Handler(char *inp)
     {
         fclose(firstf);
         fclose(secondf);
-        firstf = fopen("first.first", "r");
-        secondf = fopen("second.second", "r");
+        firstf = fopen(".first.first", "r");
+        secondf = fopen(".second.second", "r");
 
         handler(__toString(firstf));
         FILE *fp = fopen(outputPath, "r");
@@ -4404,8 +4457,8 @@ void Handler(char *inp)
         fclose(secondf);
     }
 
-    remove("first.first");
-    remove("second.second");
+    remove(".first.first");
+    remove(".second.second");
 
     _deleteArgs();
     _showOutput();
@@ -4418,13 +4471,20 @@ int main()
 
     char s[32768] = "find --str \"*a quote\" --file \"/root/this is a test filder/hi bruh.txt\"";
 
+    __boldpurple__();
     printf(">>> ");
+    __reset__();
+
     gets(s);
 
     while (strcmp(s, "exit"))
     {
         Handler(s);
+
+        __boldpurple__();
         printf(">>> ");
+        __reset__();
+
         gets(s);
     }
 
