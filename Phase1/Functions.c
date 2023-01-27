@@ -721,7 +721,8 @@ void finish()
 /// @param characters number of characters
 /// @param lines number of lines
 /// @param words number of words
-void __originFileLen(char *__file_path, int *characters, int *lines, int *words)
+/// @param maxlen maximum number of characters in a single line
+void __originFileLen(char *__file_path, int *characters, int *lines, int *words, int *maxlen)
 {
     char *path = malloc(512 * sizeof(char));
     strcpy(path, __file_path);
@@ -805,15 +806,32 @@ void __originFileLen(char *__file_path, int *characters, int *lines, int *words)
     *characters = 0;
     *lines = 0;
     *words = 0;
+    *maxlen = 0;
+
+    int curlen = 0;
 
     while (c != EOF)
     {
         (*characters)++;
+
+        if (c == '\n')
+        {
+            *maxlen = *maxlen > curlen ? *maxlen : curlen;
+            curlen = 0;
+        }
+        else
+        {
+            curlen++;
+        }
+
         *lines += (c == '\n');
         *words += (c == '\n' || c == '\t' || c == ' ');
         c = fgetc(fp);
         fputc(c, nfp);
     }
+
+    *maxlen = *maxlen > curlen ? *maxlen : curlen;
+    curlen = 0;
 
     fclose(fp);
     fclose(nfp);
@@ -853,7 +871,6 @@ void __fileLen(char *__file_path, int *characters, int *lines, int *words)
 
     FILE *fp = fopen(path, "r");
     FILE *nfp = fopen(newPath, "a");
-
 
     int c = fgetc(fp);
     fputc(c, nfp);
@@ -3214,10 +3231,11 @@ void __cmpFile(FILE *this, FILE *that, char *this_path, char *that_path)
         _lthat = 0, _wthat, _cthat;
 
     // test this
+    int dummy;
     chdir(parentDir);
-    __originFileLen(this_path, &_cthis, &_lthis, &_wthis);
+    __originFileLen(this_path, &_cthis, &_lthis, &_wthis, &dummy);
     chdir(parentDir);
-    __originFileLen(that_path, &_cthat, &_lthat, &_wthat);
+    __originFileLen(that_path, &_cthat, &_lthat, &_wthat, &dummy);
 
     _lthis++;
     _lthat++;

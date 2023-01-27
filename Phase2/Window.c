@@ -23,8 +23,14 @@ const WORD HEAD_COLOR = COLOR(7, 0);
 const WORD SIDE_COLOR = COLOR(8, 0);
 const WORD ACTV_COLOR = COLOR(0, 8);
 const WORD DESC_COLOR = COLOR(8, 0);
+const WORD CRSR_COLOR = COLOR(8, 0);
 const WORD CLPR_COLOR = COLOR(13, 15);
 const WORD STATECOLOR[] = {COLOR(3, 0), COLOR(2, 0), COLOR(14, 0)};
+
+const char UPCOM = 'k';
+const char DNCOM = 'j';
+const char LTCOM = 'h';
+const char RTCOM = 'i';
 
 enum STATE
 {
@@ -38,6 +44,56 @@ const char *STATESTR[] =
         " NORMAL ",
         " INSERT ",
         " VISUAL "};
+
+struct SCREEN
+{
+    char *filename;
+    int saved;
+    int maxrow;
+    int maxcol;
+    int startrow;
+    int endrow;
+    int startcol;
+    int endcol;
+    int activestart;
+    int activeend;
+    int sidelen;
+    enum STATE state;
+    char *desc;
+};
+
+/// @brief initializes a struct screen
+struct SCREEN *newScreen(char *_filename, int _saved,
+                         int _maxrow, int _maxcol,
+                         int _startrow, int _endrow,
+                         int _startcol, int _endcol,
+                         int _activestart, int _activeend, int _sidelen,
+                         enum STATE _state, char *_desc)
+{
+    struct SCREEN *new = (struct SCREEN *)malloc(sizeof(struct SCREEN));
+
+    new->activeend = _activeend;
+    new->activestart = _activestart;
+    new->desc = _desc;
+    new->endcol = _endcol;
+    new->endrow = _endrow;
+    new->filename = _filename;
+    new->maxcol = _maxcol;
+    new->maxrow = _maxrow;
+    new->saved = _saved;
+    new->sidelen = _sidelen;
+    new->startcol = _startcol;
+    new->startrow = _startrow;
+    new->state = _state;
+
+    return new;
+}
+
+struct SCRCUR
+{
+    struct SCREEN *scr;
+    COORD *cursor;
+};
 
 /// @brief Moves cursor to x, y
 /// @param X
@@ -89,6 +145,12 @@ void toactv()
 void todesc()
 {
     SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), DESC_COLOR);
+}
+
+/// @brief Changes colors to cursor mode
+void tocrsr()
+{
+    SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), CRSR_COLOR);
 }
 
 /// @brief Changes colors to command line prefix mode
@@ -210,7 +272,8 @@ void printline(char *line, int lineno, int startcol, int endcol, int sidelength)
 /// @param sidelen length of sidebar
 /// @param start starting row
 /// @param end last row
-void printOutputToScr(int sidelen, int start, int end, int startcol, int endcol)
+/// @param cursor
+void printOutputToScr(int sidelen, int start, int end, int startcol, int endcol, COORD *cursor)
 {
     char cwd[512];
     getcwd(cwd, 512);
@@ -228,8 +291,15 @@ void printOutputToScr(int sidelen, int start, int end, int startcol, int endcol)
 
     while (c != EOF)
     {
+        if (X == cursor->X - sidelen - 1 && Y == cursor->Y)
+            tocrsr();
+
         if (c == '\n' || c == '\0' || c == EOF)
         {
+            if (Y == cursor->Y && cursor->X - sidelen - 1 >= X)
+                tocrsr();
+            printf(" ");
+            totext();
             Y++;
             X = sidelen + 1;
             setCursorPos(X, Y);
@@ -267,13 +337,20 @@ void printOutputToScr(int sidelen, int start, int end, int startcol, int endcol)
             }
         }
 
-        if (Y >= start && Y < end && X >= startcol && X < endcol){
+        if (Y >= start && Y < end && X >= startcol && X < endcol)
+        {
             printf("%c", c);
         }
 
         X++;
         c = fgetc(OUTPUT);
+        totext();
     }
+
+    if (Y == cursor->Y && cursor->X - sidelen - 1 >= X)
+        tocrsr();
+    printf(" ");
+    totext();
 
     fclose(OUTPUT);
 
@@ -328,42 +405,33 @@ void footer(enum STATE state, const char *desc, int row, int col)
 }
 
 /// @brief Initializes a screen
-/// @param fp file
-/// @param filename name of file
-/// @param saved non-zero if the file is saved
-/// @param maxrow maximum number of rows in the file
-/// @param startrow starting row
-/// @param endrow last row
-/// @param startcol starting column of output
-/// @param endcol last column of output
-/// @param activestart first active row index
-/// @param activeend last active row index
-/// @param state
-/// @param desc description in front of state
-void initscr(
-    char *path, const char *filename, int saved,
-    int maxrow, int startrow, int endrow, int startcol, int endcol, int activestart, int activeend,
-    enum STATE state, const char *desc)
+/// @param scr current screen pointer
+/// @param cursor
+void initscr(char *path, struct SCREEN *scr, COORD *cursor)
 {
     system("cls");
     int rows, cols;
     scrsize(&cols, &rows);
 
-    header(filename, saved);
-    int sl = sidebar(maxrow, startrow, endrow, rows, activestart, activeend);
+    header(scr->filename, scr->saved);
+    int sl = sidebar(scr->maxrow, scr->startrow, scr->endrow, rows, scr->activestart, scr->activeend);
 
-    int safeendcol = (endcol - startcol > cols - sl - 2 ? cols - sl - 2 : endcol);
+    int safeendcol = (scr->endcol - scr->startcol > cols - sl - 2 ? cols - sl - 2 : scr->endcol);
 
     cat(path);
-    printOutputToScr(sl, startrow, endrow, startcol, safeendcol);
+    printOutputToScr(sl, scr->startrow, scr->endrow, scr->startcol, safeendcol, cursor);
     _clearOutput();
 
-    footer(state, desc, rows, cols);
+    footer(scr->state, scr->desc, rows, cols);
 }
 
-void showfile(char *path, enum STATE state)
+/// @brief Shows a file
+/// @param path file path
+/// @param state
+/// @return current screen pointer and cursor
+struct SCRCUR *showfile(char *path, enum STATE state)
 {
-    char filename[512];
+    char *filename = calloc(512, sizeof(char));
     int n = strlen(path);
     int ii;
     for (ii = n - 1; ii > -1; ii--)
@@ -379,11 +447,11 @@ void showfile(char *path, enum STATE state)
 
     filename[n - ii - 1] = '\0';
 
-    int chars, words, lines;
-    __originFileLen(path, &chars, &lines, &words);
+    int chars, words, lines, maxcol;
+    __originFileLen(path, &chars, &lines, &words, &maxcol);
     chdir(parentDir);
 
-    char desc[512];
+    char *desc = calloc(512, sizeof(char));
     strcpy(desc, __itoa(chars));
     strcat(desc, " characters, ");
     strcat(desc, __itoa(words));
@@ -391,15 +459,136 @@ void showfile(char *path, enum STATE state)
     strcat(desc, __itoa(lines));
     strcat(desc, " lines");
 
-    initscr(path, filename, 1, lines + 1, 1, lines + 2, 0, 1 << 12, -1, -1, state, desc);
+    int maxlen = (int)ceil(log10(lines + 1));
+
+    struct SCRCUR *scrcur = (struct SCRCUR *)malloc(sizeof(struct SCRCUR));
+    scrcur->cursor = (COORD *)malloc(sizeof(COORD));
+    scrcur->scr = (struct SCREEN *)malloc(sizeof(struct SCREEN));
+
+    scrcur->scr = newScreen(filename, 1, lines + 1, maxcol, 1, lines + 2, 0, maxcol + 5, -1, -1, maxlen + 1, state, desc);
+    scrcur->cursor->X = scrcur->scr->sidelen + 1;
+    scrcur->cursor->Y = 1;
+
+    initscr(path, scrcur->scr, scrcur->cursor);
+
+    return scrcur;
+}
+
+/// @brief Handles scr according to com
+/// @param scr current screen
+/// @param cursor
+/// @param com command
+void navigateScr(struct SCREEN *scr, COORD *cursor, char com)
+{
+    int row, col;
+    scrsize(&col, &row);
+
+    if (com == UPCOM)
+    {
+        if (cursor->Y == 1)
+        {
+            return;
+        }
+        else if (cursor->Y <= 4)
+        {
+            if (scr->startrow > 0)
+            {
+                scr->startrow--;
+                scr->endrow--;
+            }
+            else
+            {
+                cursor->Y--;
+            }
+        }
+        else
+        {
+            cursor->Y--;
+        }
+    }
+    else if (com == DNCOM)
+    {
+        if (cursor->Y == row - 3)
+        {
+            return;
+        }
+        else if (cursor->Y >= row - 6)
+        {
+            if (scr->endrow < scr->maxrow)
+            {
+                scr->startrow++;
+                scr->endrow++;
+            }
+            else
+            {
+                cursor->Y++;
+            }
+        }
+        else
+        {
+            cursor->Y++;
+        }
+    }
+    else if (com == LTCOM)
+    {
+        if (cursor->X == scr->sidelen)
+        {
+            return;
+        }
+        else if (cursor->X <= scr->sidelen + 4)
+        {
+            if (scr->endcol > 0)
+            {
+                scr->startcol--;
+                scr->endcol--;
+            }
+            else
+            {
+                cursor->X--;
+            }
+        }
+        else
+        {
+            cursor->X--;
+        }
+    }
+    else if (com == RTCOM)
+    {
+        if (cursor->X == col)
+        {
+            return;
+        }
+        else if (cursor->X >= col - 4)
+        {
+            if (scr->endcol > scr->maxcol)
+            {
+                scr->startcol++;
+                scr->endcol++;
+            }
+            else
+            {
+                cursor->X++;
+            }
+        }
+        else
+        {
+            cursor->X++;
+        }
+    }
 }
 
 int main()
 {
     init();
-    showfile("/root/bruh/wtf/this/is/a/test/myfile1.txt", NORMAL);
 
+    struct SCRCUR *scrcur = showfile("/root/bruh/wtf/this/is/a/test/myfile1.txt", NORMAL);
     getch();
+    navigateScr(scrcur->scr, scrcur->cursor, RTCOM);
+    system("cls");
+    printf("%d", scrcur->cursor->X);
+    initscr("/root/bruh/wtf/this/is/a/test/myfile1.txt", scrcur->scr, scrcur->cursor);
+    getch();
+
     system("cls");
     finish();
 }
