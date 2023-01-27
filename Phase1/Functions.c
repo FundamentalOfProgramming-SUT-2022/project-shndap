@@ -220,25 +220,27 @@ void _showOutput()
     char c = fgetc(OUTPUT);
     while (c != EOF)
     {
-        if(c == '\n' || c == '\0' || c == EOF)
+        if (c == '\n' || c == '\0' || c == EOF)
         {
             __reset__();
         }
 
-        if(c == '~')
+        if (c == '~')
         {
             c = fgetc(OUTPUT);
-            if(c == '!')
+            if (c == '!')
             {
                 __red__();
                 c = fgetc(OUTPUT);
                 continue;
-            }else if(c == '?')
+            }
+            else if (c == '?')
             {
                 __cyan__();
                 c = fgetc(OUTPUT);
                 continue;
-            }else if(c == '&')
+            }
+            else if (c == '&')
             {
                 __red__();
                 c = fgetc(OUTPUT);
@@ -851,6 +853,7 @@ void __fileLen(char *__file_path, int *characters, int *lines, int *words)
 
     FILE *fp = fopen(path, "r");
     FILE *nfp = fopen(newPath, "a");
+
 
     int c = fgetc(fp);
     fputc(c, nfp);
@@ -4465,30 +4468,30 @@ void Handler(char *inp)
     _clearOutput();
 }
 
-int main()
-{
-    init();
+// int main()
+// {
+//     init();
 
-    char s[32768] = "find --str \"*a quote\" --file \"/root/this is a test filder/hi bruh.txt\"";
+//     char s[32768] = "find --str \"*a quote\" --file \"/root/this is a test filder/hi bruh.txt\"";
 
-    __boldpurple__();
-    printf(">>> ");
-    __reset__();
+//     __boldpurple__();
+//     printf(">>> ");
+//     __reset__();
 
-    gets(s);
+//     gets(s);
 
-    while (strcmp(s, "exit"))
-    {
-        Handler(s);
+//     while (strcmp(s, "exit"))
+//     {
+//         Handler(s);
 
-        __boldpurple__();
-        printf(">>> ");
-        __reset__();
+//         __boldpurple__();
+//         printf(">>> ");
+//         __reset__();
 
-        gets(s);
-    }
+//         gets(s);
+//     }
 
-    finish();
+//     finish();
 
-    return 0;
-}
+//     return 0;
+// }

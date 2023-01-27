@@ -8,8 +8,8 @@
       "args": [],
       "stopAtEntry": false,
       "externalConsole": true,
-      "cwd": "d:/Uni/BP/Project/Phase1",
-      "program": "d:/Uni/BP/Project/Phase1/build/Debug/outDebug",
+      "cwd": "d:/Uni/BP/Project/Phase2",
+      "program": "d:/Uni/BP/Project/Phase2/build/Debug/outDebug",
       "MIMode": "gdb",
       "miDebuggerPath": "gdb",
       "setupCommands": [

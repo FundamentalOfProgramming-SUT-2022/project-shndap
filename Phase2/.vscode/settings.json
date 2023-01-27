@@ -34,6 +34,8 @@
     "**/.vscode/**"
   ],
   "files.associations": {
-    "typeinfo": "c"
+    "windows.h": "c",
+    "conio.h": "c",
+    "math.h": "c"
   }
 }
