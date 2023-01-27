@@ -210,7 +210,7 @@ void printline(char *line, int lineno, int startcol, int endcol, int sidelength)
 /// @param sidelen length of sidebar
 /// @param start starting row
 /// @param end last row
-void printOutputToScr(int sidelen, int start, int end)
+void printOutputToScr(int sidelen, int start, int end, int startcol, int endcol)
 {
     char cwd[512];
     getcwd(cwd, 512);
@@ -224,13 +224,16 @@ void printOutputToScr(int sidelen, int start, int end)
     int X = sidelen + 1, Y = 1;
 
     setCursorPos(X, Y);
+    X = 0;
 
     while (c != EOF)
     {
         if (c == '\n' || c == '\0' || c == EOF)
         {
             Y++;
+            X = sidelen + 1;
             setCursorPos(X, Y);
+            X = 0;
             c = fgetc(OUTPUT);
             continue;
         }
@@ -258,13 +261,17 @@ void printOutputToScr(int sidelen, int start, int end)
             }
             else
             {
-                if (Y >= start && Y < end)
+                if (Y >= start && Y < end && X >= startcol && X < endcol)
                     printf("~");
+                X++;
             }
         }
 
-        if (Y >= start && Y < end)
+        if (Y >= start && Y < end && X >= startcol && X < endcol){
             printf("%c", c);
+        }
+
+        X++;
         c = fgetc(OUTPUT);
     }
 
@@ -327,13 +334,15 @@ void footer(enum STATE state, const char *desc, int row, int col)
 /// @param maxrow maximum number of rows in the file
 /// @param startrow starting row
 /// @param endrow last row
+/// @param startcol starting column of output
+/// @param endcol last column of output
 /// @param activestart first active row index
 /// @param activeend last active row index
 /// @param state
 /// @param desc description in front of state
 void initscr(
     char *path, const char *filename, int saved,
-    int maxrow, int startrow, int endrow, int activestart, int activeend,
+    int maxrow, int startrow, int endrow, int startcol, int endcol, int activestart, int activeend,
     enum STATE state, const char *desc)
 {
     system("cls");
@@ -343,8 +352,10 @@ void initscr(
     header(filename, saved);
     int sl = sidebar(maxrow, startrow, endrow, rows, activestart, activeend);
 
+    int safeendcol = (endcol - startcol > cols - sl - 2 ? cols - sl - 2 : endcol);
+
     cat(path);
-    printOutputToScr(sl, startrow, endrow);
+    printOutputToScr(sl, startrow, endrow, startcol, safeendcol);
     _clearOutput();
 
     footer(state, desc, rows, cols);
@@ -380,13 +391,13 @@ void showfile(char *path, enum STATE state)
     strcat(desc, __itoa(lines));
     strcat(desc, " lines");
 
-    initscr(path, filename, 1, lines + 1, 1, lines + 2, -1, -1, state, desc);
+    initscr(path, filename, 1, lines + 1, 1, lines + 2, 0, 1 << 12, -1, -1, state, desc);
 }
 
 int main()
 {
     init();
-    showfile("/root/bruh/wtf/this/is/a/test/myfile2.txt", NORMAL);
+    showfile("/root/bruh/wtf/this/is/a/test/myfile1.txt", NORMAL);
 
     getch();
     system("cls");
