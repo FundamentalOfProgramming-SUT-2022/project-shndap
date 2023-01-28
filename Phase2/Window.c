@@ -48,6 +48,7 @@ const char *STATESTR[] =
 struct SCREEN
 {
     char *filename;
+    int *linesize;
     int saved;
     int maxrow;
     int maxcol;
@@ -63,7 +64,7 @@ struct SCREEN
 };
 
 /// @brief initializes a struct screen
-struct SCREEN *newScreen(char *_filename, int _saved,
+struct SCREEN *newScreen(char *_filename, int* _linesize, int _saved,
                          int _maxrow, int _maxcol,
                          int _startrow, int _endrow,
                          int _startcol, int _endcol,
@@ -78,6 +79,7 @@ struct SCREEN *newScreen(char *_filename, int _saved,
     new->endcol = _endcol;
     new->endrow = _endrow;
     new->filename = _filename;
+    new->linesize = _linesize;
     new->maxcol = _maxcol;
     new->maxrow = _maxrow;
     new->saved = _saved;
@@ -222,9 +224,10 @@ int sidebar(int maxrow, int startrow, int endrow, int scrrow, int activestart, i
 
     COORD pos = {0, 0};
 
-    for (int i = startrow; i < scrrow - 2; i++)
+    for (int ii = 1; ii < scrrow - 2; ii++)
     {
-        pos.Y = i - startrow + 1;
+        int i = startrow + ii - 1;
+        pos.Y = ii;
         SetConsoleCursorPosition(GetStdHandle(STD_OUTPUT_HANDLE), pos);
         if (i < endrow)
         {
@@ -268,12 +271,50 @@ void printline(char *line, int lineno, int startcol, int endcol, int sidelength)
     }
 }
 
+/// @brief Get size of lines
+/// @param linesize array to be filled (1-based)
+void getlinesize(int* linesize)
+{
+    char cwd[512];
+    getcwd(cwd, 512);
+
+    chdir(parentDir);
+
+    OUTPUT = fopen(outputPath, "r");
+
+    char c = fgetc(OUTPUT);
+
+    int curlen = 1;
+    int curline = 1;
+
+    while(c != EOF)
+    {
+        if(c != '\n')
+            goto current;
+
+        linesize[curline++] = curlen; /*problematic*/
+        curlen = 0;
+        
+        current:
+            c = fgetc(OUTPUT);
+            curlen++;
+    }
+
+    linesize[curline++] = curlen;
+
+    fclose(OUTPUT);
+    chdir(cwd);
+}
+
 /// @brief Prints output to screen
 /// @param sidelen length of sidebar
 /// @param start starting row
 /// @param end last row
+/// @param startcol starting column
+/// @param endcol last column
+/// @param scrrow size of screen
 /// @param cursor
-void printOutputToScr(int sidelen, int start, int end, int startcol, int endcol, COORD *cursor)
+void printOutputToScr(int sidelen, int start, int end, int startcol, int endcol, int scrrow, COORD *cursor)
 {
     char cwd[512];
     getcwd(cwd, 512);
@@ -286,23 +327,34 @@ void printOutputToScr(int sidelen, int start, int end, int startcol, int endcol,
 
     int X = sidelen + 1, Y = 1;
 
-    setCursorPos(X, Y);
+    setCursorPos(X, 1);
     X = 0;
+
+    // printf("%d, %d, %d\n", start, end, cursor->Y);
+    // getch();
 
     while (c != EOF)
     {
+        if (Y >= end)
+            break;
+
+            
         if (X == cursor->X - sidelen - 1 && Y == cursor->Y)
             tocrsr();
 
         if (c == '\n' || c == '\0' || c == EOF)
         {
-            if (Y == cursor->Y && cursor->X - sidelen - 1 >= X)
+            if (Y == cursor->Y && cursor->X - sidelen - 1 - startcol >= X){
                 tocrsr();
-            printf(" ");
+                cursor->X = sidelen + 1 + X + startcol;
+                printf(" ");
+            }
+
             totext();
             Y++;
             X = sidelen + 1;
-            setCursorPos(X, Y);
+            if(Y - start + 1)
+                setCursorPos(X, Y - start + 1);
             X = 0;
             c = fgetc(OUTPUT);
             continue;
@@ -347,8 +399,10 @@ void printOutputToScr(int sidelen, int start, int end, int startcol, int endcol,
         totext();
     }
 
-    if (Y == cursor->Y && cursor->X - sidelen - 1 >= X)
+    if (Y == cursor->Y && cursor->X - sidelen - 1 - startcol >= X){
         tocrsr();
+        cursor->X = sidelen + 1 + X;
+    }
     printf(" ");
     totext();
 
@@ -414,12 +468,16 @@ void initscr(char *path, struct SCREEN *scr, COORD *cursor)
     scrsize(&cols, &rows);
 
     header(scr->filename, scr->saved);
+    int safeendrow = (scr->endrow - scr->startrow > rows - 2 ? rows - 2 : scr->endrow);
+    scr->endrow = safeendrow;
+    
     int sl = sidebar(scr->maxrow, scr->startrow, scr->endrow, rows, scr->activestart, scr->activeend);
 
     int safeendcol = (scr->endcol - scr->startcol > cols - sl - 2 ? cols - sl - 2 : scr->endcol);
+    scr->endcol = safeendcol;
 
     cat(path);
-    printOutputToScr(sl, scr->startrow, scr->endrow, scr->startcol, safeendcol, cursor);
+    printOutputToScr(sl, scr->startrow, safeendrow, scr->startcol, safeendcol, rows, cursor);
     _clearOutput();
 
     footer(scr->state, scr->desc, rows, cols);
@@ -459,13 +517,18 @@ struct SCRCUR *showfile(char *path, enum STATE state)
     strcat(desc, __itoa(lines));
     strcat(desc, " lines");
 
+    int *linesize = calloc(lines + 2, sizeof(int));
+    cat(path);
+    getlinesize(linesize);
+    _clearOutput();
+
     int maxlen = (int)ceil(log10(lines + 1));
 
     struct SCRCUR *scrcur = (struct SCRCUR *)malloc(sizeof(struct SCRCUR));
     scrcur->cursor = (COORD *)malloc(sizeof(COORD));
     scrcur->scr = (struct SCREEN *)malloc(sizeof(struct SCREEN));
 
-    scrcur->scr = newScreen(filename, 1, lines + 1, maxcol, 1, lines + 2, 0, maxcol + 5, -1, -1, maxlen + 1, state, desc);
+    scrcur->scr = newScreen(filename, linesize, 1, lines + 1, maxcol, 1, lines + 1, 0, maxcol, 0, 0, maxlen + 1, state, desc);
     scrcur->cursor->X = scrcur->scr->sidelen + 1;
     scrcur->cursor->Y = 1;
 
@@ -489,12 +552,13 @@ void navigateScr(struct SCREEN *scr, COORD *cursor, char com)
         {
             return;
         }
-        else if (cursor->Y <= 4)
+        else if (cursor->Y - scr->startrow <= 4)
         {
-            if (scr->startrow > 0)
+            if (scr->startrow > 1)
             {
                 scr->startrow--;
                 scr->endrow--;
+                cursor->Y--;
             }
             else
             {
@@ -508,16 +572,17 @@ void navigateScr(struct SCREEN *scr, COORD *cursor, char com)
     }
     else if (com == DNCOM)
     {
-        if (cursor->Y == row - 3)
+        if (cursor->Y + 1 == scr->maxrow)
         {
             return;
         }
-        else if (cursor->Y >= row - 6)
+        else if (cursor->Y - scr->startrow >= row - 6)
         {
             if (scr->endrow < scr->maxrow)
             {
                 scr->startrow++;
                 scr->endrow++;
+                cursor->Y++;
             }
             else
             {
@@ -531,16 +596,17 @@ void navigateScr(struct SCREEN *scr, COORD *cursor, char com)
     }
     else if (com == LTCOM)
     {
-        if (cursor->X == scr->sidelen)
+        if (cursor->X == scr->startcol + scr->sidelen + 1)
         {
             return;
         }
-        else if (cursor->X <= scr->sidelen + 4)
+        else if (cursor->X <= scr->sidelen + scr->startcol + 5)
         {
-            if (scr->endcol > 0)
+            if (scr->startcol > 0)
             {
                 scr->startcol--;
                 scr->endcol--;
+                cursor->X--;
             }
             else
             {
@@ -554,16 +620,17 @@ void navigateScr(struct SCREEN *scr, COORD *cursor, char com)
     }
     else if (com == RTCOM)
     {
-        if (cursor->X == col)
+        if (cursor->X == scr->maxcol + scr->sidelen)
         {
             return;
         }
-        else if (cursor->X >= col - 4)
+        else if (cursor->X - scr->startcol - 1 >= col - 4 - scr->sidelen)
         {
-            if (scr->endcol > scr->maxcol)
+            if (scr->endcol < scr->maxcol)
             {
                 scr->startcol++;
                 scr->endcol++;
+                cursor->X++;
             }
             else
             {
@@ -575,20 +642,53 @@ void navigateScr(struct SCREEN *scr, COORD *cursor, char com)
             cursor->X++;
         }
     }
+
+    int lnsz = scr->linesize[cursor->Y];
+    int diff = cursor->X - lnsz - scr->sidelen - 1;
+    if(diff > 0)
+    {
+        cursor->X -= diff;
+        if(scr->startcol - diff < 0)
+        {
+            scr->startcol = 0;
+            scr->endcol = scr->maxcol;
+        }else
+        {
+            scr->startcol -= diff;
+            scr->startcol -= diff;
+        }
+    }
+}
+
+void runFile(char* path, enum STATE state)
+{
+    struct SCRCUR *scrcur = showfile(path, state);
+
+    char c = getch();
+    while(c != 'x')
+    {
+        navigateScr(scrcur->scr, scrcur->cursor, c);
+        initscr(path, scrcur->scr, scrcur->cursor);
+        c = getch();
+    }
 }
 
 int main()
 {
     init();
 
-    struct SCRCUR *scrcur = showfile("/root/bruh/wtf/this/is/a/test/myfile1.txt", NORMAL);
-    getch();
-    navigateScr(scrcur->scr, scrcur->cursor, RTCOM);
-    system("cls");
-    printf("%d", scrcur->cursor->X);
-    initscr("/root/bruh/wtf/this/is/a/test/myfile1.txt", scrcur->scr, scrcur->cursor);
-    getch();
+    runFile("/root/bruh/wtf/this/is/a/test/myfile1.txt", VISUAL);
 
-    system("cls");
+    // Handler("find --str \"4* 1\" --file /root/bruh/wtf/this/is/a/test/myfile1.txt -all -byword");
+    // struct SCRCUR *scrcur = showfile("/root/bruh/wtf/this/is/a/test/myfile1.txt", VISUAL);
+    // navigateScr(scrcur->scr, scrcur->cursor, RTCOM);
+    // system("cls");
+    // navigateScr(scrcur->scr, scrcur->cursor, LTCOM);
+    // system("cls");
+    // printf("%d", scrcur->cursor->X);
+    // initscr("/root/bruh/wtf/this/is/a/test/myfile1.txt", scrcur->scr, scrcur->cursor);
+    // getch();
+
+    // system("cls");
     finish();
 }

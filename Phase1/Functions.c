@@ -1164,9 +1164,14 @@ int __find(char *str, short *pat, int pats, int s_i, int *last_ix)
         *last_ix = i;
         if (match_str(str + i, pat, last_ix))
         {
-            while (i < strs && pat[0] == -1 && __matchc(pat[0], str[i]))
+            while (i < strs && pat[0] == -1 && !__matchc(pat[1], str[i]))
             {
                 i++;
+            }
+
+            while ((*last_ix) < strs && pat[pats - 1] == -1 && __matchc(pat[pats - 1], str[*last_ix]))
+            {
+                (*last_ix)++;
             }
 
             return i == strs ? -1 : i;
@@ -1181,7 +1186,7 @@ int __find(char *str, short *pat, int pats, int s_i, int *last_ix)
 /// @param arrc array of characters
 void __toWordArr(char *str, int *arrc)
 {
-    int wcnt = 0, ccnt = 0, prevs = -1;
+    int wcnt = 1, ccnt = 0, prevs = 0;
     int _dum_ = strlen(str);
     for (int i = 0; i < _dum_; i++)
     {
@@ -1190,10 +1195,14 @@ void __toWordArr(char *str, int *arrc)
             arrc[ccnt++] = wcnt;
         }
 
-        if (str[i] == ' ' || str[i] == '\n' || str[i] == EOF || str[i] == '\0')
+        if (prevs && (str[i] == ' ' || str[i] == '\n' || str[i] == EOF || str[i] == '\0'))
         {
             wcnt++;
+            prevs = 0;
+            continue;
         }
+
+        prevs++;
     }
 }
 
@@ -2262,11 +2271,17 @@ int find(char *__file_path, char *pat_, int f_type, int at)
         int c_index = __find(str, pat, pats, ii, &last_ix);
         if (c_index != -1)
         {
-            if (pat[0] != -1 && c_index > 0 && !(str[c_index - 1] == ' ' || str[c_index - 1] == '\n' || str[c_index - 1] == '\t'))
+            if (
+                pat[0] == -1 &&
+                (!c_index ||
+                 (c_index && (str[c_index - 1] == ' ' || str[c_index - 1] == '\n' || str[c_index - 1] == '\t'))))
             {
                 continue;
             }
-            else if (pat[pats - 1] != -1 && last_ix < _dum_ && !(str[last_ix] == ' ' || str[last_ix] == '\n' || str[last_ix] == '\t'))
+            else if (
+                pat[pats - 1] == -1 &&
+                (last_ix - 1 == _dum_ ||
+                 ((last_ix - 1 != _dum_) && (str[last_ix - 1] == ' ' || str[last_ix - 1] == '\n' || str[last_ix - 1] == '\t'))))
             {
                 continue;
             }
