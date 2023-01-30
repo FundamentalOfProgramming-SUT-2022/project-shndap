@@ -17,6 +17,7 @@
 #endif
 
 #define COLOR(bg, fg) (bg * 16 + fg)
+#define SIGN(x) (x > 0 ? +1 : -1)
 
 enum COLORVAL
 {
@@ -38,6 +39,14 @@ enum COLORVAL
     WHITE
 };
 
+enum COLORINGSTATE
+{
+    DEFAULT,
+    ONCURSOR,
+    SELECTED,
+    HIGHLIGHTED
+};
+
 const WORD TEXT_COLOR = COLOR(BLACK, WHITE);
 const WORD HEAD_COLOR = COLOR(LIGHTGRAY, BLACK);
 const WORD SIDE_COLOR = COLOR(BLACK, DARKGRAY);
@@ -47,6 +56,10 @@ const WORD CRSR_COLOR = COLOR(DARKGRAY, BLACK);
 const WORD CLPR_COLOR = COLOR(LIGHTMAGENTA, WHITE);
 const WORD HGLT_COLOR = COLOR(YELLOW, RED);
 const WORD SLCT_COLOR = COLOR(LIGHTBLUE, WHITE);
+const WORD NARO_COLOR = COLOR(BLACK, MAGENTA);
+const WORD DNGE_COLOR[] = {COLOR(BLACK, RED), COLOR(DARKGRAY, RED), COLOR(LIGHTBLUE, RED), COLOR(YELLOW, RED)};
+const WORD CORR_COLOR[] = {COLOR(BLACK, YELLOW), COLOR(DARKGRAY, YELLOW), COLOR(LIGHTBLUE, YELLOW), COLOR(YELLOW, BROWN)};
+const WORD QUOT_COLOR[] = {COLOR(BLACK, BROWN), COLOR(DARKGRAY, BROWN), COLOR(LIGHTBLUE, BROWN), COLOR(YELLOW, BROWN)};
 const WORD STATECOLOR[] = {COLOR(CYAN, BLACK), COLOR(GREEN, BLACK), COLOR(YELLOW, BLACK)};
 
 const char UPCOM = 'k';
@@ -196,6 +209,89 @@ void scrsize(int *col, int *row)
     *row = csbi.srWindow.Bottom - csbi.srWindow.Top + 1;
 }
 
+/// @brief background color
+/// @param col
+int bgcol(WORD col)
+{
+    return col / 16;
+}
+
+/// @brief foreground color
+/// @param col
+int fgcol(WORD col)
+{
+    return col % 16;
+}
+
+/// @brief current color of output
+/// @return current color of output
+WORD curcol()
+{
+    CONSOLE_SCREEN_BUFFER_INFO csbi;
+    GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi);
+    return csbi.wAttributes;
+}
+
+/// @brief Get color for output
+/// @param openparn 
+/// @param openbrkt 
+/// @param opencurl 
+/// @param quote 
+/// @param c current character
+/// @return color
+WORD getcol(int openparn, int openbrkt, int opencurl, int quote, char c)
+{
+    enum COLORINGSTATE colstate;
+    int current = curcol();
+    int curbg = bgcol(current);
+
+    if (curbg == bgcol(HGLT_COLOR))
+        colstate = HIGHLIGHTED;
+    else if (curbg == bgcol(SLCT_COLOR))
+        colstate = SELECTED;
+    else if (curbg == bgcol(CRSR_COLOR))
+        colstate = ONCURSOR;
+    else
+        colstate = DEFAULT;
+
+    if(quote || c == '"')
+    {
+        return QUOT_COLOR[colstate];
+    }
+
+    if(c == '{' || c == '(' || c == '[')
+    {
+        return CORR_COLOR[colstate];
+    }
+
+    if(c == ')')
+    {
+        if(openparn < 0)    return DNGE_COLOR[colstate];
+        else                return CORR_COLOR[colstate];
+    }
+
+    if(c == '}')
+    {
+        if(opencurl < 0)    return DNGE_COLOR[colstate];
+        else                return CORR_COLOR[colstate];
+    }
+
+    if(c == ']')
+    {
+        if(openbrkt < 0)    return DNGE_COLOR[colstate];
+        else                return CORR_COLOR[colstate];
+    }
+
+    return current;
+}
+
+/// @brief Changes color to col
+/// @param col 
+void tocol(WORD col)
+{
+    SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), col);
+}
+
 /// @brief Changes colors to text mode
 void totext()
 {
@@ -248,6 +344,30 @@ void toslct()
 void tohglt()
 {
     SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), HGLT_COLOR);
+}
+
+/// @brief Changes colors to not-a-row mode
+void tonaro()
+{
+    SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), NARO_COLOR);
+}
+
+/// @brief Changes colors to correct parantheses mode
+void tocorr(enum COLORINGSTATE colstate)
+{
+    SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), CORR_COLOR[colstate]);
+}
+
+/// @brief Changes colors to dangeling parantheses mode
+void todnge(enum COLORINGSTATE colstate)
+{
+    SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), DNGE_COLOR[colstate]);
+}
+
+/// @brief Changes colors to quote mode
+void toquot(enum COLORINGSTATE colstate)
+{
+    SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), QUOT_COLOR[colstate]);
 }
 
 /// @brief Changes color to state mode
@@ -328,7 +448,7 @@ int sidebar(int maxrow, int startrow, int endrow, int scrrow, int activestart, i
         }
         else
         {
-            totext();
+            tonaro();
             printf(formatp);
         }
     }
@@ -429,8 +549,28 @@ void printOutputToScr(enum STATE state, int sidelen, int start, int end, int sta
     }
 
     int slct = 0;
+    int quote = 0;
+    int openparn = 0;
+    int openbrkt = 0;
+    int opencurl = 0;
+
     while (c != EOF)
     {
+        if (c == '[' && !quote)
+            openbrkt = openbrkt < 0 ? openbrkt = 1 : openbrkt + 1;
+        if (c == ']' && !quote)
+            openbrkt--;
+        if (c == '{' && !quote)
+            opencurl = opencurl < 0 ? opencurl = 1 : opencurl + 1;
+        if (c == '}' && !quote)
+            opencurl--;
+        if (c == '(' && !quote)
+            openparn = openparn < 0 ? openparn = 1 : openparn + 1;
+        if (c == ')' && !quote)
+            openparn--;
+        if (c == '"')
+            quote = !quote;
+
         if (state == VISUAL)
         {
             // printf("%d %d | %d %d\n", firstcrsr.X, firstcrsr.Y, X + sidelen + 1, Y);
@@ -508,15 +648,22 @@ void printOutputToScr(enum STATE state, int sidelen, int start, int end, int sta
             }
             else
             {
-                if (Y >= start && Y < end && X >= startcol && X < endcol)
+                if (Y >= start && Y < end && X >= startcol && X < endcol){
+                    WORD prevcol = curcol();
+                    tocol(getcol(openparn, openbrkt, opencurl, quote, c));
                     printf("~");
+                    tocol(prevcol);
+                }
                 X++;
             }
         }
 
         if (Y >= start && Y < end && X >= startcol && X < endcol)
         {
+            WORD prevcol = curcol();
+            tocol(getcol(openparn, openbrkt, opencurl, quote, c));
             printf("%c", c);
+            tocol(prevcol);
         }
 
         X++;
@@ -658,7 +805,8 @@ struct SCRCUR *showfile(char *path, enum STATE state)
     scrcur->scr = (struct SCREEN *)malloc(sizeof(struct SCREEN));
     scrcur->initcursor = (COORD *)malloc(sizeof(COORD));
 
-    scrcur->scr = newScreen(path, filename, linesize, 1, lines + 1, maxcol, 1, lines + 1, 0, maxcol, 1, 2, maxlen + 1, state, desc);
+//                                                        ********
+    scrcur->scr = newScreen(path, filename, linesize, 1, lines + 1, maxcol, 1, lines + 2, 0, maxcol, 1, 2, maxlen + 1, state, desc);
     scrcur->cursor->X = scrcur->scr->sidelen + 1;
     scrcur->cursor->Y = 1;
     scrcur->initcursor->X = scrcur->cursor->X;
@@ -678,30 +826,70 @@ void navigateScr(struct SCRCUR *scrcur, char com)
     int row, col;
     scrsize(&col, &row);
 
-    // if(scrcur->scr->state == VISUAL)
-    // {
-    //     if(com == CPYCOM)
-    //     {
-    //         copyStr(scrcur->scr->filepath, scrcur->cursor->Y, scrcur->cursor->X - scrcur->scr->sidelen - 1, scrcur->count,
-    //                 scrcur->count > 0 ? 1 : -1);
-    //     }
-    //     else if(com == CUTCOM)
-    //     {
+    if (scrcur->scr->state == VISUAL)
+    {
+        COORD *firstcursor = malloc(sizeof(COORD));
+        firstcursor->X = scrcur->cursor->X;
+        firstcursor->Y = scrcur->cursor->Y;
 
-    //     }
-    //     else if(com == DELCOM)
-    //     {
+        if (cmpCursor(scrcur->cursor, scrcur->initcursor) == 1)
+        {
+            firstcursor->X = scrcur->initcursor->X;
+            firstcursor->Y = scrcur->initcursor->Y;
+        }
 
-    //     }
-    // }
+        if (com == CPYCOM)
+        {
+            copyStr(scrcur->scr->filepath, firstcursor->Y, firstcursor->X - scrcur->scr->sidelen - 1, scrcur->count,
+                    SIGN(scrcur->count));
+            scrcur->scr->state = NORMAL;
+            return;
+        }
+        else if (com == CUTCOM)
+        {
+            cutStr(scrcur->scr->filepath, firstcursor->Y, firstcursor->X - scrcur->scr->sidelen - 1, scrcur->count,
+                   SIGN(scrcur->count));
 
-    // if(scrcur->scr->state == NORMAL)
-    // {
-    //     if(com == PSTCOM)
-    //     {
+            if (cmpCursor(scrcur->cursor, scrcur->initcursor) == 1)
+            {
+                scrcur->cursor->X = scrcur->initcursor->X;
+                scrcur->cursor->Y = scrcur->initcursor->Y;
+            }
+            scrcur->count = 0;
 
-    //     }
-    // }
+            scrcur->scr->activestart = scrcur->cursor->Y;
+            scrcur->scr->activeend = scrcur->cursor->Y + 1;
+
+            scrcur->scr->state = NORMAL;
+            return;
+        }
+        else if (com == DELCOM)
+        {
+            removeStr(scrcur->scr->filepath, firstcursor->Y, firstcursor->X - scrcur->scr->sidelen - 1, scrcur->count,
+                      SIGN(scrcur->count));
+
+            if (cmpCursor(scrcur->cursor, scrcur->initcursor) == 1)
+            {
+                scrcur->cursor->X = scrcur->initcursor->X;
+                scrcur->cursor->Y = scrcur->initcursor->Y;
+            }
+            scrcur->count = 0;
+
+            scrcur->scr->activestart = scrcur->cursor->Y;
+            scrcur->scr->activeend = scrcur->cursor->Y + 1;
+
+            scrcur->scr->state = NORMAL;
+            return;
+        }
+    }
+
+    if (scrcur->scr->state == NORMAL)
+    {
+        if (com == PSTCOM)
+        {
+            pasteStr(scrcur->scr->filepath, scrcur->cursor->Y, scrcur->cursor->X - scrcur->scr->sidelen - 1);
+        }
+    }
 
     if (com == UPCOM)
     {
@@ -732,16 +920,17 @@ void navigateScr(struct SCRCUR *scrcur, char com)
     }
     else if (com == DNCOM)
     {
-        if (scrcur->cursor->Y + 1 != scrcur->scr->maxrow)
-            scrcur->count += scrcur->scr->linesize[scrcur->cursor->Y + 1];
+        printf("|%d %d|", scrcur->cursor->Y, scrcur->scr->maxrow);
+        if (scrcur->cursor->Y + 1 != scrcur->scr->maxrow + 1)
+            scrcur->count += scrcur->scr->linesize[scrcur->cursor->Y];
 
-        if (scrcur->cursor->Y + 1 == scrcur->scr->maxrow)
+        if (scrcur->cursor->Y + 1 == scrcur->scr->maxrow + 1)
         {
             return;
         }
         else if (scrcur->cursor->Y - scrcur->scr->startrow >= row - 6)
         {
-            if (scrcur->scr->endrow < scrcur->scr->maxrow)
+            if (scrcur->scr->endrow <= scrcur->scr->maxrow)
             {
                 scrcur->scr->startrow++;
                 scrcur->scr->endrow++;
@@ -817,7 +1006,7 @@ void navigateScr(struct SCRCUR *scrcur, char com)
     if (diff > 0)
     {
         scrcur->cursor->X -= diff;
-        scrcur->count -= diff; /*fix here*/
+        scrcur->count -= diff;
 
         if (scrcur->scr->startcol - diff < 0)
         {
@@ -855,6 +1044,8 @@ void runFile(char *path, enum STATE state)
 {
     struct SCRCUR *scrcur = showfile(path, state);
 
+    printf("%d %d", scrcur->cursor->X, scrcur->cursor->Y);
+
     char c = getch();
     while (c != 'x')
     {
@@ -869,7 +1060,7 @@ int main()
 {
     init();
 
-    runFile("/root/bruh/wtf/this/is/a/test/myfile1.txt", VISUAL);
+    runFile("/root/bruh/wtf/this/is/a/test/myfile2.txt", NORMAL);
 
     // Handler("find --str \"4* 1\" --file /root/bruh/wtf/this/is/a/test/myfile1.txt -all -byword");
     // struct SCRCUR *scrcur = showfile("/root/bruh/wtf/this/is/a/test/myfile1.txt", VISUAL);
@@ -882,5 +1073,5 @@ int main()
     // getch();
 
     // system("cls");
-    finish();
+    // finish();
 }

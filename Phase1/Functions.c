@@ -78,6 +78,10 @@ FILE *CLIPBOARD;
 FILE *OUTPUT;
 int currargc;
 
+const unsigned char ENDBRANCH[] = {192, ' ', '\0'};
+const unsigned char MIDBRANCH[] = {195, ' ', '\0'};
+const unsigned char PERBRANCH[] = {179, '\0'};
+
 /// @brief Changes output color to purple
 void __boldpurple__()
 {
@@ -243,6 +247,24 @@ void _showOutput()
             else if (c == '&')
             {
                 __red__();
+                c = fgetc(OUTPUT);
+                continue;
+            }
+            else if (c == '^')
+            {
+                printf("%s", ENDBRANCH);
+                c = fgetc(OUTPUT);
+                continue;
+            }
+            else if (c == '`')
+            {
+                printf("%s", MIDBRANCH);
+                c = fgetc(OUTPUT);
+                continue;
+            }
+            else if (c == '%')
+            {
+                printf("%s", PERBRANCH);
                 c = fgetc(OUTPUT);
                 continue;
             }
@@ -3455,10 +3477,36 @@ void compareFiles(char *this_path, char *that_path)
     chdir(parentDir);
 }
 
+/// @brief Number of subdirectories in cwd
+/// @return 
+int __cntsub()
+{
+    int out = 0;
+
+    struct dirent *de;
+    DIR *dr = opendir(".");
+
+    if (dr == NULL)
+    {
+        return 0;
+    }
+
+    while ((de = readdir(dr)) != NULL)
+    {
+
+        if ((de->d_name)[0] == '.')
+            continue;
+
+        out++;
+    }
+
+    return out;
+}
+
 /// @brief Helper function for tree
 /// @param depth current depth of tree
 /// @param precspace preceding space
-void __tree(int depth, int precspace)
+void __tree(int depth, int precspace, int* printPer)
 {
     if (depth == 0)
         return;
@@ -3471,16 +3519,20 @@ void __tree(int depth, int precspace)
         return;
     }
 
+    int subcnt = __cntsub();
+    int copysub = subcnt;
+
     while ((de = readdir(dr)) != NULL)
     {
 
         if ((de->d_name)[0] == '.')
             continue;
 
-        for (int k = 0; k < precspace; k++)
-            _writeToOutput(" ");
+        for (int k = 0; k < precspace; k++){
+            _writeToOutput(printPer[k] ? "~%" : " ");
+        }
 
-        _writeToOutput("|--> ");
+        _writeToOutput(subcnt-- == 1 ? "~^" : "~`");
         _writeToOutput(de->d_name);
         _writeToOutput("\n");
 
@@ -3488,7 +3540,8 @@ void __tree(int depth, int precspace)
         {
             chdir(de->d_name);
 
-            __tree(depth - 1, precspace + 5);
+            printPer[precspace] = subcnt;
+            __tree(depth - 1, precspace + 2, printPer);
 
             chdir("..");
         }
@@ -3503,7 +3556,10 @@ void tree(int depth)
 
     _writeToOutput("root\n");
 
-    __tree(depth, 0);
+    int* printPer = calloc(1024, sizeof(int));
+    printPer[0] = __cntsub() != 1;
+
+    __tree(depth, 0, printPer);
 
     chdir(parentDir);
 }
