@@ -59,6 +59,7 @@ const WORD CLPR_COLOR = COLOR(LIGHTMAGENTA, WHITE);
 const WORD HGLT_COLOR = COLOR(YELLOW, RED);
 const WORD SLCT_COLOR = COLOR(LIGHTBLUE, WHITE);
 const WORD NARO_COLOR = COLOR(BLACK, MAGENTA);
+const WORD EROR_COLOR = COLOR(BLACK, RED);
 const WORD DNGE_COLOR[] = {COLOR(BLACK, RED), COLOR(DARKGRAY, RED), COLOR(LIGHTBLUE, RED), COLOR(YELLOW, RED)};
 const WORD CORR_COLOR[] = {COLOR(BLACK, YELLOW), COLOR(DARKGRAY, YELLOW), COLOR(LIGHTBLUE, YELLOW), COLOR(YELLOW, BROWN)};
 const WORD QUOT_COLOR[] = {COLOR(BLACK, BROWN), COLOR(DARKGRAY, BROWN), COLOR(LIGHTBLUE, BROWN), COLOR(YELLOW, BROWN)};
@@ -103,6 +104,7 @@ const char *STATESTR[] =
 
 struct SCREEN
 {
+    char *initfilepath;
     char *filepath;
     char *filename;
     int *linesize;
@@ -121,7 +123,7 @@ struct SCREEN
 };
 
 /// @brief initializes a struct screen
-struct SCREEN *newScreen(char *_filepath, char *_filename, int *_linesize, int _saved,
+struct SCREEN *newScreen(char *_initfilepath, char *_filepath, char *_filename, int *_linesize, int _saved,
                          int _maxrow, int _maxcol,
                          int _startrow, int _endrow,
                          int _startcol, int _endcol,
@@ -137,6 +139,7 @@ struct SCREEN *newScreen(char *_filepath, char *_filename, int *_linesize, int _
     new->endrow = _endrow;
     new->filename = _filename;
     new->filepath = _filepath;
+    new->initfilepath = _initfilepath;
     new->linesize = _linesize;
     new->maxcol = _maxcol;
     new->maxrow = _maxrow;
@@ -373,6 +376,12 @@ void tohglt()
 void tonaro()
 {
     SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), NARO_COLOR);
+}
+
+/// @brief Changes colors to error mode
+void toeror()
+{
+    SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), EROR_COLOR);
 }
 
 /// @brief Changes colors to correct parantheses mode
@@ -634,6 +643,7 @@ void printOutputToScr(enum STATE state, int sidelen, int start, int end, int sta
                     tocrsr();
                 else
                     totext();
+
                 cursor->X = sidelen + 1 + X + startcol;
                 printf(" ");
             }
@@ -783,6 +793,104 @@ void initscr(struct SCRCUR *scrcur)
     footer(scrcur->scr->state, scrcur->scr->desc, rows, cols);
 }
 
+/// @brief Empties a file
+/// @param path
+void emptyFile(char *path)
+{
+    int chars, lines, words, maxlen;
+    __originFileLen(path, &chars, &lines, &words, &maxlen);
+    chdir(parentDir);
+    removeStr(path, 1, 0, chars, 1);
+}
+
+/// @brief Open a file
+/// @param __file_path
+/// @return file
+FILE *openPath(char *__file_path)
+{
+    char *path = malloc(512 * sizeof(char));
+    strcpy(path, __file_path);
+
+    int i, foundDot = 0;
+    for (i = strlen(path) - 1; path[i] != '/' && i > -1; i--)
+    {
+        foundDot |= (path[i] == '.');
+    }
+
+    if (i == -1 || !foundDot)
+    {
+        _writeToOutput("~!ERROR: Invalid file name\n");
+        free(path);
+        chdir(parentDir);
+        return NULL;
+    }
+
+    char *filename = malloc((strlen(path) - 1 - i) * sizeof(char));
+
+    int _dum_ = strlen(path);
+    for (int j = i + 1; j < _dum_; j++)
+    {
+        filename[j - i - 1] = path[j];
+    }
+
+    filename[strlen(path) - 1 - i] = '\0';
+    path[i] = '\0';
+
+    char *tok;
+    int isFirst = 1;
+
+    while ((tok = strtok(path, "/")) != NULL)
+    {
+        if (isFirst && strcmp(tok, "root"))
+        {
+            _writeToOutput("~!ERROR: File should be in root folder\n");
+            chdir(parentDir);
+            return NULL;
+        }
+
+        isFirst = 0;
+
+        if (chdir(tok))
+        {
+            _writeToOutput("~!ERROR: Invalid directory\n");
+            chdir(parentDir);
+            return NULL;
+        }
+
+        path = NULL;
+    }
+
+    if (!__fileExists(filename))
+    {
+        _writeToOutput("~!ERROR: File ~?");
+        _writeToOutput(__file_path);
+        _writeToOutput(" ~&does not exist\n");
+        free(path);
+        chdir(parentDir);
+        return NULL;
+    }
+
+    FILE *fp = fopen(filename, "r+");
+
+    free(path);
+    chdir(parentDir);
+    return fp;
+}
+
+/// @brief Pastes a file into another using path
+/// @param thispath
+/// @param thatpath
+void pasteFileInto(char *thispath, char *thatpath)
+{
+    FILE *this = openPath(thispath);
+    FILE *that = openPath(thatpath);
+
+    __copy(this, that);
+
+    fclose(this);
+    fclose(that);
+}
+
 /// @brief Shows a file
 /// @param path file path
 /// @param state
@@ -790,6 +898,9 @@ void initscr(struct SCRCUR *scrcur)
 struct SCRCUR *showfile(char *path, enum STATE state)
 {
     char *filename = calloc(512, sizeof(char));
+    char *untcopy = calloc(512, sizeof(char));
+    strcpy(untcopy, untitledPathCat);
+
     int n = strlen(path);
     int ii;
     for (ii = n - 1; ii > -1; ii--)
@@ -829,8 +940,10 @@ struct SCRCUR *showfile(char *path, enum STATE state)
     scrcur->scr = (struct SCREEN *)malloc(sizeof(struct SCREEN));
     scrcur->initcursor = (COORD *)malloc(sizeof(COORD));
 
-    //                                                        ********
-    scrcur->scr = newScreen(path, filename, linesize, 1, lines + 1, maxcol, 1, lines + 2, 0, maxcol, 1, 2, maxlen + 1, state, desc);
+    emptyFile(untcopy);
+    pasteFileInto(path, untcopy);
+
+    scrcur->scr = newScreen(path, untcopy, filename, linesize, 0, lines + 1, maxcol, 1, lines + 2, 0, maxcol, 1, 2, maxlen + 1, state, desc);
     scrcur->cursor->X = scrcur->scr->sidelen + 1;
     scrcur->cursor->Y = 1;
     scrcur->initcursor->X = scrcur->cursor->X;
@@ -994,15 +1107,373 @@ int buildArgs(char *inp)
     return argc;
 }
 
-/// @brief Empties a file
-/// @param path 
-void emptyFile(char* path)
+/// @brief Prints Error
+/// @param scrcur
+/// @param text
+void printErrorInCLI(struct SCRCUR *scrcur, char *text)
 {
-    int chars, lines, words;
-    __fileLen(path, &chars, &lines, &words);
+    int col, row;
+    scrsize(&col, &row);
 
-    removeStr(path, 1, 0, chars, 1);
-    _showOutput();
+    initscr(scrcur);
+
+    setCursorPos(strlen(" Command Line: "), row);
+
+    toeror();
+    printf("ERROR: %s", text);
+    totext();
+    sleep(1);
+}
+
+/// @brief Prints Message with 1 second waiting
+/// @param scrcur
+/// @param text
+void printMessageInCLI(struct SCRCUR *scrcur, char *text)
+{
+    int col, row;
+    scrsize(&col, &row);
+
+    initscr(scrcur);
+
+    setCursorPos(strlen(" Command Line: "), row);
+
+    totext();
+    printf("%s", text);
+    sleep(1);
+}
+
+/// @brief Prints message with no wait
+/// @param scrcur
+/// @param text
+void printMessageInCLIWOwaiting(struct SCRCUR *scrcur, char *text)
+{
+    int col, row;
+    scrsize(&col, &row);
+
+    initscr(scrcur);
+
+    setCursorPos(strlen(" Command Line: "), row);
+
+    totext();
+    printf("%s", text);
+}
+
+/// @brief if a file is ready to be pasted into
+/// @param __file_path file name
+/// @param scrcur
+/// @return 0: error, 1: doesn't exist, 2: exists
+int readytoCreateFile(struct SCRCUR *scrcur, char *__file_path)
+{
+    char *path = malloc(512 * sizeof(char));
+    strcpy(path, __file_path);
+
+    int i, foundDot = 0;
+    for (i = strlen(path) - 1; path[i] != '/' && i > -1; i--)
+    {
+        foundDot |= (path[i] == '.');
+    }
+
+    if (i == -1 || !foundDot)
+    {
+        printErrorInCLI(scrcur, "Invalid file name");
+        free(path);
+        chdir(parentDir);
+        return 0;
+    }
+
+    char *filename = malloc((strlen(path) - 1 - i) * sizeof(char));
+
+    int _dum_ = strlen(path);
+    for (int j = i + 1; j < _dum_; j++)
+    {
+        filename[j - i - 1] = path[j];
+    }
+
+    filename[strlen(path) - 1 - i] = '\0';
+    path[i] = '\0';
+
+    char *tok;
+    int isFirst = 1;
+
+    while ((tok = strtok(path, "/")) != NULL)
+    {
+        if (isFirst && strcmp(tok, "root"))
+        {
+            printErrorInCLI(scrcur, "File should be created in root folder");
+            chdir(parentDir);
+            return 0;
+        }
+
+        isFirst = 0;
+
+        _mkdir(tok);
+        chdir(tok);
+
+        path = NULL;
+    }
+
+    if (__fileExists(filename))
+    {
+        free(path);
+        chdir(parentDir);
+        return 2;
+    }
+    else
+    {
+        free(path);
+        chdir(parentDir);
+        return 1;
+    }
+}
+
+/// @brief Creates a file
+/// @param __file_path file name
+/// @param scrcur
+/// @return 1 if there waas no problem
+int newCreateFile(struct SCRCUR *scrcur, char *__file_path)
+{
+    char *path = malloc(512 * sizeof(char));
+    strcpy(path, __file_path);
+
+    int i, foundDot = 0;
+    for (i = strlen(path) - 1; path[i] != '/' && i > -1; i--)
+    {
+        foundDot |= (path[i] == '.');
+    }
+
+    if (i == -1 || !foundDot)
+    {
+        printErrorInCLI(scrcur, "Invalid file name");
+        free(path);
+        chdir(parentDir);
+        return 0;
+    }
+
+    char *filename = malloc((strlen(path) - 1 - i) * sizeof(char));
+
+    int _dum_ = strlen(path);
+    for (int j = i + 1; j < _dum_; j++)
+    {
+        filename[j - i - 1] = path[j];
+    }
+
+    filename[strlen(path) - 1 - i] = '\0';
+    path[i] = '\0';
+
+    char *tok;
+    int isFirst = 1;
+
+    while ((tok = strtok(path, "/")) != NULL)
+    {
+        if (isFirst && strcmp(tok, "root"))
+        {
+            printErrorInCLI(scrcur, "File should be created in root folder");
+            chdir(parentDir);
+            return 0;
+        }
+
+        isFirst = 0;
+
+        _mkdir(tok);
+        chdir(tok);
+
+        path = NULL;
+    }
+
+    if (__fileExists(filename))
+    {
+        printErrorInCLI(scrcur, "File already exists");
+        free(path);
+        chdir(parentDir);
+        return 0;
+    }
+
+    FILE *fp = fopen(filename, "w");
+
+    if (fp)
+    {
+        fclose(fp);
+        chdir(parentDir);
+        return 1;
+    }
+    else
+    {
+        printErrorInCLI(scrcur, "Could not create file\n");
+        chdir(parentDir);
+        return 0;
+    }
+}
+
+/// @brief Saves a file
+/// @param scrcur
+void savefile(struct SCRCUR *scrcur)
+{
+    if (!strcmp(scrcur->scr->initfilepath, untitledPathCat))
+    {
+        printMessageInCLIWOwaiting(scrcur, "Provide a name/path for your file: ");
+        char *str = calloc(1024, sizeof(char));
+        gets(str);
+
+        int argc = buildArgs(str);
+
+        char *arg[argc];
+        for (int i = 0; i < argc; i++)
+        {
+            arg[i] = _getarg(i);
+        }
+
+        if (argc != 1)
+        {
+            printErrorInCLI(scrcur, "Invalid input");
+            return;
+        }
+
+        int rtcf = readytoCreateFile(scrcur, arg[0]);
+
+        if (rtcf == 2)
+        {
+            printMessageInCLIWOwaiting(scrcur, "File already exists, do you wish to replace it? (y/n) ");
+            char c;
+            scanf("%c", &c);
+            if (c == 'y')
+            {
+                emptyFile(arg[0]);
+                pasteFileInto(scrcur->scr->initfilepath, arg[0]);
+                *scrcur = *showfile(arg[0], NORMAL);
+                scrcur->scr->saved = 1;
+                printMessageInCLI(scrcur, "File saved succesfully");
+            }
+            else
+            {
+                return;
+            }
+        }
+        else if (rtcf == 1)
+        {
+            int done = newCreateFile(scrcur, arg[0]);
+            _clearOutput();
+
+            if (done)
+            {
+                pasteFileInto(scrcur->scr->initfilepath, arg[0]);
+                *scrcur = *showfile(arg[0], NORMAL);
+                scrcur->scr->saved = 1;
+                printMessageInCLI(scrcur, "File saved succesfully");
+                return;
+            }
+            else
+            {
+                return;
+            }
+        }
+        else
+        {
+        }
+
+        return;
+    }
+    else
+    {
+        if (!scrcur->scr->saved)
+        {
+            pasteFileInto(untitledPath, scrcur->scr->initfilepath);
+            *scrcur = *showfile(scrcur->scr->initfilepath, NORMAL);
+            scrcur->scr->saved = 1;
+            printMessageInCLI(scrcur, "File saved successfully");
+            return;
+        }
+    }
+}
+
+/// @brief Saves a file in path
+/// @param scrcur
+/// @param path
+void saveasfile(struct SCRCUR *scrcur, char *path)
+{
+    int rtcf = readytoCreateFile(scrcur, path);
+
+    if (rtcf == 2)
+    {
+        printMessageInCLIWOwaiting(scrcur, "File already exists, do you wish to replace it? (y/n) ");
+        char c;
+        scanf("%c", &c);
+        if (c == 'y')
+        {
+            emptyFile(path);
+            pasteFileInto(scrcur->scr->filepath, path);
+            *scrcur = *showfile(path, NORMAL);
+            scrcur->scr->saved = 1;
+            printMessageInCLI(scrcur, "File saved succesfully");
+        }
+        else
+        {
+            return;
+        }
+    }
+    else if (rtcf == 1)
+    {
+        int done = newCreateFile(scrcur, path);
+        _clearOutput();
+
+        if (done)
+        {
+            pasteFileInto(scrcur->scr->filepath, path);
+            *scrcur = *showfile(path, NORMAL);
+            scrcur->scr->saved = 1;
+            printMessageInCLI(scrcur, "File saved succesfully");
+            return;
+        }
+        else
+        {
+            return;
+        }
+    }
+}
+
+/// @brief Moves cursor to a certain pos
+/// @param scrcur
+/// @param torow row of file
+/// @param tocol col of file
+void moveCursorTo(struct SCRCUR *scrcur, int torow, int tocol)
+{
+    int scrrow, scrcol, avlcol, avlrow;
+    scrsize(&scrcol, &scrrow);
+
+    avlrow = scrrow - 3;
+    avlcol = scrcol - scrcur->scr->sidelen - 1;
+
+    int col_left = tocol - tocol % avlcol;
+    int col_right = col_left + avlcol - 1;
+
+    if (col_right >= scrcur->scr->linesize[torow])
+    {
+        col_left = max(0, scrcur->scr->linesize[torow] - avlcol + 1);
+        col_right = col_left + avlcol - 1;
+    }
+
+    int row_up = torow - torow % avlrow;
+    int row_down = row_up + avlrow + 1;
+
+    if(row_down > scrcur->scr->maxrow + 1)
+    {
+        row_down = scrcur->scr->maxrow + 1;
+        row_up = max(0, row_down - avlrow - 1);
+    }
+
+    scrcur->cursor->X = tocol + scrcur->scr->sidelen + 1;
+    scrcur->cursor->Y = torow;
+    scrcur->initcursor->X = tocol + scrcur->scr->sidelen + 1;
+    scrcur->initcursor->Y = torow;
+
+    scrcur->scr->activestart = scrcur->cursor->Y;
+    scrcur->scr->activeend = scrcur->cursor->Y + 1;
+
+    scrcur->scr->startcol = col_left;
+    scrcur->scr->endcol = col_right;
+    scrcur->scr->startrow = row_up + 1;
+    scrcur->scr->endrow = row_down;
+
+    initscr(scrcur);
 }
 
 /// @brief Handles ':' commands in CLI
@@ -1018,44 +1489,60 @@ void handleColonCommands(struct SCRCUR *scrcur, char *str, int row)
         arg[i] = _getarg(i);
     }
 
-
-
     if (!strcmp(arg[0], SAVE_COM))
     {
-        /* save */
+        if (argc != 1)
+        {
+            printErrorInCLI(scrcur, "Invalid command");
+            return;
+        }
+
+        savefile(scrcur);
     }
     else if (!strcmp(arg[0], SVAS_COM))
     {
         if (argc != 2)
         {
-            /* invalid command */
+            printErrorInCLI(scrcur, "Invalid command");
             return;
         }
 
-        if(__fileExists(arg[1]))
-        {
-            /* file already exists */
-            if(/*wants to replace*/1)
-            {
-
-            }
-            else
-            {
-                return;
-            }
-        }
-        else
-        {
-
-        }
-
-        
+        saveasfile(scrcur, arg[1]);
     }
     else if (!strcmp(arg[0], OPEN_COM))
     {
+        if (argc != 2)
+        {
+            printErrorInCLI(scrcur, "Invalid command");
+            return;
+        }
+
+        int rtcf = readytoCreateFile(scrcur, arg[1]);
+
+        if (rtcf == 1)
+        {
+            savefile(scrcur);
+            createFile(arg[1]);
+            *scrcur = *showfile(arg[1], NORMAL);
+        }
+        else if (rtcf == 2)
+        {
+            savefile(scrcur);
+            *scrcur = *showfile(arg[1], NORMAL);
+        }
+
+        return;
     }
     else if (!strcmp(arg[0], UNDO_COM))
     {
+        if (argc != 1)
+        {
+            printErrorInCLI(scrcur, "Invalid command");
+            return;
+        }
+
+        undo(scrcur->scr->filepath);
+        scrcur->scr->saved = 0;
     }
     else if (!strcmp(arg[0], RPLC_COM))
     {
@@ -1073,7 +1560,7 @@ void navigateScr(struct SCRCUR *scrcur, char com)
     int row, col;
     scrsize(&col, &row);
 
-    if (com == TO_NORMAL || scrcur->scr->state == NORMAL)
+    if (com == TO_NORMAL)
     {
         scrcur->scr->state = NORMAL;
         initscr(scrcur);
@@ -1086,12 +1573,13 @@ void navigateScr(struct SCRCUR *scrcur, char com)
         if (com == UDOCOM)
         {
             undo(scrcur->scr->filepath);
+            scrcur->scr->saved = 0;
         }
         else if (com == PH1COM)
         {
             char *str = calloc(32768, sizeof(char));
             gets(str);
-            /* : commands */
+            handleColonCommands(scrcur, str, row);
             free(str);
         }
         else if (com == CMDCOM)
@@ -1135,15 +1623,16 @@ void navigateScr(struct SCRCUR *scrcur, char com)
 
         if (com == CPYCOM)
         {
-            copyStr(scrcur->scr->filepath, firstcursor->Y, firstcursor->X - scrcur->scr->sidelen - 1, scrcur->count,
-                    SIGN(scrcur->count));
+            int changed = copyStr(scrcur->scr->filepath, firstcursor->Y, firstcursor->X - scrcur->scr->sidelen - 1, scrcur->count,
+                                  SIGN(scrcur->count));
+            scrcur->scr->saved = !changed;
             scrcur->scr->state = INSERT;
             return;
         }
         else if (com == CUTCOM)
         {
-            cutStr(scrcur->scr->filepath, firstcursor->Y, firstcursor->X - scrcur->scr->sidelen - 1, scrcur->count,
-                   SIGN(scrcur->count));
+            int changed = cutStr(scrcur->scr->filepath, firstcursor->Y, firstcursor->X - scrcur->scr->sidelen - 1, scrcur->count,
+                                 SIGN(scrcur->count));
 
             if (cmpCursor(scrcur->cursor, scrcur->initcursor) == 1)
             {
@@ -1156,12 +1645,15 @@ void navigateScr(struct SCRCUR *scrcur, char com)
             scrcur->scr->activeend = scrcur->cursor->Y + 1;
 
             scrcur->scr->state = INSERT;
+
+            scrcur->scr->saved = !changed;
+
             return;
         }
         else if (com == DELCOM)
         {
-            removeStr(scrcur->scr->filepath, firstcursor->Y, firstcursor->X - scrcur->scr->sidelen - 1, scrcur->count,
-                      SIGN(scrcur->count));
+            int changed = removeStr(scrcur->scr->filepath, firstcursor->Y, firstcursor->X - scrcur->scr->sidelen - 1, scrcur->count,
+                                    SIGN(scrcur->count));
 
             if (cmpCursor(scrcur->cursor, scrcur->initcursor) == 1)
             {
@@ -1174,6 +1666,9 @@ void navigateScr(struct SCRCUR *scrcur, char com)
             scrcur->scr->activeend = scrcur->cursor->Y + 1;
 
             scrcur->scr->state = INSERT;
+
+            scrcur->scr->saved = !changed;
+
             return;
         }
     }
@@ -1182,7 +1677,11 @@ void navigateScr(struct SCRCUR *scrcur, char com)
     {
         if (com == PSTCOM)
         {
-            pasteStr(scrcur->scr->filepath, scrcur->cursor->Y, scrcur->cursor->X - scrcur->scr->sidelen - 1);
+            int changed = pasteStr(scrcur->scr->filepath, scrcur->cursor->Y, scrcur->cursor->X - scrcur->scr->sidelen - 1);
+            scrcur->scr->saved = 0;
+            scrcur->scr->saved = !changed;
+
+            return;
         }
     }
 
@@ -1272,8 +1771,9 @@ void navigateScr(struct SCRCUR *scrcur, char com)
         if (scrcur->cursor->X < scrcur->scr->linesize[scrcur->cursor->Y] + scrcur->scr->sidelen)
             scrcur->count++;
 
-        if (scrcur->cursor->X == scrcur->scr->maxcol + scrcur->scr->sidelen)
+        if (scrcur->cursor->X == scrcur->scr->maxcol + scrcur->scr->sidelen + 1)
         {
+            /*may be incorrect*/
             return;
         }
         else if (scrcur->cursor->X - scrcur->scr->startcol - 1 >= col - 4 - scrcur->scr->sidelen)
@@ -1338,21 +1838,31 @@ void runFile(char *path, enum STATE state)
 {
     struct SCRCUR *scrcur = showfile(path, state);
 
-    char c = getch();
+    moveCursorTo(scrcur, 102, 240);
+
+    char c;
+
+    if (scrcur->scr->state == NORMAL)
+        c = getche();
+    else
+        c = getch();
+
     while (c != 'x')
     {
         navigateScr(scrcur, c);
         initscr(scrcur);
-        c = getch();
+        if (scrcur->scr->state == NORMAL)
+            c = getche();
+        else
+            c = getch();
     }
 }
 
 int main()
 {
-    // init();
-    // runFile("/root/blah/j.txt", NORMAL);
-
-    emptyFile("/root/blah/j.txt");
+    /* VERYYYYYYY IMPORTANNNNNNNNNNTTTTTTTTTTTTTTTTTTTT */
+    init();
+    runFile("/root/bruh/wtf/this/is/a/test/myfile1.txt", NORMAL);
 
     // Handler("find --str \"4* 1\" --file /root/bruh/wtf/this/is/a/test/myfile1.txt -all -byword");
     // struct SCRCUR *scrcur = showfile("/root/bruh/wtf/this/is/a/test/myfile1.txt", VISUAL);

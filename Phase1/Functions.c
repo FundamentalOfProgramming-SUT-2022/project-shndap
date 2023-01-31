@@ -73,9 +73,12 @@ char parentDir[512];
 char clipboardPath[512];
 char outputPath[512];
 char argsPath[512];
+char untitledPath[512];
+char untitledPathCat[512];
 char clipboardPathCat[512];
 FILE *CLIPBOARD;
 FILE *OUTPUT;
+FILE *UNTITLED;
 int currargc;
 
 const unsigned char ENDBRANCH[] = {192, ' ', '\0'};
@@ -436,6 +439,16 @@ void init()
     chdir(".args");
     getcwd(argsPath, 512);
     currargc = 0;
+
+    chdir("..");
+    _mkdir(".untitled");
+    chdir(".untitled");
+    getcwd(untitledPath, 512);
+    strcat(untitledPath, "\\untitled.untitled");
+    UNTITLED = fopen("untitled.untitled", "w");
+    fclose(UNTITLED);
+
+    strcpy(untitledPathCat, "/root/.untitled/untitled.untitled");
 
     chdir(parentDir);
 }
@@ -908,8 +921,6 @@ void __fileLen(char *__file_path, int *characters, int *lines, int *words)
         c = fgetc(fp);
         fputc(c, nfp);
     }
-
-    printf("%d", *characters);
 
     fclose(fp);
     fclose(nfp);
