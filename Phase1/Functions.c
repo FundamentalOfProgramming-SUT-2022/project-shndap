@@ -535,17 +535,64 @@ void _removeDots()
     }
 }
 
+/// @brief helper function to clear cache
+void _emptyFolder()
+{
+    struct dirent *de;
+    DIR *dr = opendir(".");
+
+    if (dr == NULL)
+    {
+        return;
+    }
+
+    while ((de = readdir(dr)) != NULL)
+    {
+        if (!strcmp(de->d_name, ".") || !strcmp(de->d_name, ".."))
+        {
+            continue;
+        }
+
+        if (!__isFile(de->d_name))
+        {
+            chdir(de->d_name);
+
+            _emptyFolder();
+
+            chdir("..");
+            rmdir(de->d_name);
+        }
+        else
+        {
+            remove(de->d_name);
+        }
+    }
+}
+
 /// @brief Empties the cache folders
 void _deleteCache()
 {
     chdir(parentDir);
     chdir("root");
 
+    _deleteArgs();
+
+    if(!chdir(".args")){
+        _emptyFolder();
+        chdir("..");
+    }
+
+    if(!chdir(".output")){
+        _emptyFolder();
+        chdir("..");
+    }
+
     rmdir(".args");
     remove(".clipboard\\clipboard.clp");
     rmdir(".clipboard");
-    remove(".output\\out.out");
     rmdir(".output");
+    remove(".untitled\\untitled.untitled");
+    rmdir(".untitled");
 
     chdir(parentDir);
     chdir("root");
@@ -762,6 +809,11 @@ void __originFileLen(char *__file_path, int *characters, int *lines, int *words,
     char *path = malloc(512 * sizeof(char));
     strcpy(path, __file_path);
 
+    *characters = 0;
+    *lines = 0;
+    *words = 0;
+    *maxlen = 0;
+
     int i, foundDot = 0;
     for (i = strlen(path) - 1; path[i] != '/' && i > -1; i--)
     {
@@ -838,10 +890,6 @@ void __originFileLen(char *__file_path, int *characters, int *lines, int *words,
 
     int c = fgetc(fp);
     fputc(c, nfp);
-    *characters = 0;
-    *lines = 0;
-    *words = 0;
-    *maxlen = 0;
 
     int curlen = 0;
 
