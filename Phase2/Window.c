@@ -545,6 +545,7 @@ void getlinesize(int *linesize)
     linesize[curline++] = curlen;
 
     fclose(OUTPUT);
+
     chdir(cwd);
 }
 
@@ -892,6 +893,67 @@ void pasteFileInto(char *thispath, char *thatpath)
     fclose(that);
 }
 
+/// @brief Handles ~
+/// @param thispath 
+/// @param thatpath 
+void pasteAndHandleTilde(char* thispath, char* thatpath)
+{
+    FILE *this = openPath(thispath);
+    FILE *that = openPath(thatpath);
+
+    char c = fgetc(this);
+    while (c != EOF)
+    {
+        if (c == '~')
+        {
+            c = fgetc(this);
+            if (c == '!')
+            {
+                c = fgetc(this);
+                continue;
+            }
+            else if (c == '?')
+            {
+                c = fgetc(this);
+                continue;
+            }
+            else if (c == '&')
+            {
+                c = fgetc(this);
+                continue;
+            }
+            else if (c == '^')
+            {
+                fputs(ENDBRANCH, that);
+                c = fgetc(OUTPUT);
+                continue;
+            }
+            else if (c == '`')
+            {
+                fputs(MIDBRANCH, that);
+                c = fgetc(OUTPUT);
+                continue;
+            }
+            else if (c == '%')
+            {
+                fputs(PERBRANCH, that);
+                c = fgetc(OUTPUT);
+                continue;
+            }
+            else
+            {
+                fputc('~', that);
+            }
+        }
+
+        fputc(c, that);
+        c = fgetc(OUTPUT);
+    }
+
+    fclose(this);
+    fclose(that);
+}
+
 /// @brief Shows a file
 /// @param path file path
 /// @param state
@@ -930,8 +992,11 @@ struct SCRCUR *showfile(char *path, enum STATE state)
     strcat(desc, " lines");
 
     int *linesize = calloc(lines + 2, sizeof(int));
+
+    _clearOutput();
     cat(path);
     getlinesize(linesize);
+
     _clearOutput();
 
     int maxlen = (int)ceil(log10(lines + 1));
@@ -1307,7 +1372,8 @@ int newCreateFile(struct SCRCUR *scrcur, char *__file_path)
 
 /// @brief Saves a file
 /// @param scrcur
-void savefile(struct SCRCUR *scrcur)
+/// @return 1 if saved successfully
+int savefile(struct SCRCUR *scrcur)
 {
     if (!strcmp(scrcur->scr->initfilepath, untitledPathCat))
     {
@@ -1315,6 +1381,7 @@ void savefile(struct SCRCUR *scrcur)
         char *str = calloc(1024, sizeof(char));
         gets(str);
 
+        _deleteArgs();
         int argc = buildArgs(str);
 
         char *arg[argc];
@@ -1326,7 +1393,7 @@ void savefile(struct SCRCUR *scrcur)
         if (argc != 1)
         {
             printErrorInCLI(scrcur, "Invalid input");
-            return;
+            return 0;
         }
 
         int rtcf = readytoCreateFile(scrcur, arg[0]);
@@ -1343,10 +1410,11 @@ void savefile(struct SCRCUR *scrcur)
                 *scrcur = *showfile(arg[0], NORMAL);
                 scrcur->scr->saved = 1;
                 printMessageInCLI(scrcur, "File saved succesfully");
+                return 1;
             }
             else
             {
-                return;
+                return 0;
             }
         }
         else if (rtcf == 1)
@@ -1360,30 +1428,44 @@ void savefile(struct SCRCUR *scrcur)
                 *scrcur = *showfile(arg[0], NORMAL);
                 scrcur->scr->saved = 1;
                 printMessageInCLI(scrcur, "File saved succesfully");
-                return;
+                return 1;
             }
             else
             {
-                return;
+                return 0;
             }
         }
         else
         {
         }
 
-        return;
+        return 0;
     }
     else
     {
         if (!scrcur->scr->saved)
         {
-            pasteFileInto(untitledPath, scrcur->scr->initfilepath);
+            pasteFileInto(untitledPathCat, scrcur->scr->initfilepath);
             *scrcur = *showfile(scrcur->scr->initfilepath, NORMAL);
             scrcur->scr->saved = 1;
             printMessageInCLI(scrcur, "File saved successfully");
-            return;
+            return 1;
+        }
+        else
+        {
+            return 1;
         }
     }
+
+    return 0;
+}
+
+/// @brief Saves a file by force
+/// @param scrcur
+void forcesave(struct SCRCUR *scrcur)
+{
+    while (!savefile(scrcur))
+        ;
 }
 
 /// @brief Saves a file in path
@@ -1652,6 +1734,83 @@ void getRowColbyindex(char *path, int ix, int *row, int *col)
     fclose(fp);
 }
 
+/// @brief Same as function.c::Handler but doesn't show output
+/// @param inp
+void NoOutputHandler(char *inp)
+{
+    chdir(parentDir);
+    int n = strlen(inp);
+
+    FILE *firstf = fopen(".first.first", "w");
+    FILE *secondf = fopen(".second.second", "w");
+
+    int inquote = 0;
+    int isarman = 0;
+
+    for (int i = 0; i < n - 4; i++)
+    {
+        if (inp[i] == '"')
+        {
+            int isrealquote = (i != 0 && inp[i - 1] != '\\');
+
+            if (isrealquote)
+            {
+                inquote = !inquote;
+            }
+        }
+
+        if (!inquote && inp[i] == ' ' && inp[i + 1] == '=' && inp[i + 2] == 'D' && inp[i + 3] == ' ')
+        {
+            for (int j = 0; j < i; j++)
+            {
+                fputc(inp[j], firstf);
+            }
+            fputc(EOF, firstf);
+
+            for (int j = i + 4; j < n; j++)
+            {
+                fputc(inp[j], secondf);
+            }
+            fputc(EOF, secondf);
+
+            isarman = 1;
+            break;
+        }
+    }
+
+    if (isarman)
+    {
+        fclose(firstf);
+        fclose(secondf);
+        firstf = fopen(".first.first", "r");
+        secondf = fopen(".second.second", "r");
+
+        handler(__toString(firstf));
+        FILE *fp = fopen(outputPath, "r");
+        char *str = __toString(fp);
+        fclose(fp);
+
+        _clearOutput();
+        _deleteArgs();
+
+        arman(__toString(secondf), str);
+        fclose(fp);
+        fclose(firstf);
+        fclose(secondf);
+    }
+    else
+    {
+        handler(inp);
+        fclose(firstf);
+        fclose(secondf);
+    }
+
+    remove(".first.first");
+    remove(".second.second");
+
+    _deleteArgs();
+}
+
 /// @brief Handles ':' commands in CLI
 /// @param str
 /// @param row screen size in rows
@@ -1670,6 +1829,7 @@ void handleColonCommands(struct SCRCUR *scrcur, char *str, int row)
         if (argc != 1)
         {
             printErrorInCLI(scrcur, "Invalid command");
+            _deleteArgs();
             return;
         }
 
@@ -1680,6 +1840,7 @@ void handleColonCommands(struct SCRCUR *scrcur, char *str, int row)
         if (argc != 2)
         {
             printErrorInCLI(scrcur, "Invalid command");
+            _deleteArgs();
             return;
         }
 
@@ -1690,6 +1851,7 @@ void handleColonCommands(struct SCRCUR *scrcur, char *str, int row)
         if (argc != 2)
         {
             printErrorInCLI(scrcur, "Invalid command");
+            _deleteArgs();
             return;
         }
 
@@ -1697,7 +1859,7 @@ void handleColonCommands(struct SCRCUR *scrcur, char *str, int row)
 
         if (rtcf == 1)
         {
-            savefile(scrcur);
+            forcesave(scrcur);
             createFile(arg[1]);
             *scrcur = *showfile(arg[1], NORMAL);
         }
@@ -1707,6 +1869,7 @@ void handleColonCommands(struct SCRCUR *scrcur, char *str, int row)
             *scrcur = *showfile(arg[1], NORMAL);
         }
 
+        _deleteArgs();
         return;
     }
     else if (!strcmp(arg[0], UNDO_COM))
@@ -1714,6 +1877,7 @@ void handleColonCommands(struct SCRCUR *scrcur, char *str, int row)
         if (argc != 1)
         {
             printErrorInCLI(scrcur, "Invalid command");
+            _deleteArgs();
             return;
         }
 
@@ -1735,8 +1899,27 @@ void handleColonCommands(struct SCRCUR *scrcur, char *str, int row)
     }
     else
     {
-        /* PHASE 1 */
+        NoOutputHandler(str);
+        
+        _makeACopy("/root/.output/out.out");
+        _clearOutput();
+
+        forcesave(scrcur);
+        emptyFile(untitledPathCat);
+        *scrcur = *showfile(untitledPathCat, NORMAL);
+
+        fclose(fopen("root\\.output\\.lastout.out", "w"));
+
+        pasteAndHandleTilde("/root/.output/.out.outcopy", "/root/.output/.lastout.out");
+
+        *scrcur = *showfile("/root/.output/.lastout.out", NORMAL);
+        scrcur->scr->initfilepath = untitledPathCat;
+
+        remove("/root/.output/.out.outcopy");
+        remove("/root/.output/.lastout.out");
     }
+
+    _deleteArgs();
 }
 
 /// @brief Handles scr according to com
@@ -2059,5 +2242,7 @@ int main()
     // getch();
 
     // system("cls");
-    // finish();
+
+    getch();
+    finish();
 }
