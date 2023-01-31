@@ -18,6 +18,7 @@
 
 #define COLOR(bg, fg) (bg * 16 + fg)
 #define SIGN(x) (x > 0 ? +1 : -1)
+#define ISNUM(x) (x >= '0' && x <= '9')
 #define esc_key 27
 
 enum COLORVAL
@@ -1454,7 +1455,7 @@ void moveCursorTo(struct SCRCUR *scrcur, int torow, int tocol)
     int row_up = torow - torow % avlrow;
     int row_down = row_up + avlrow + 1;
 
-    if(row_down > scrcur->scr->maxrow + 1)
+    if (row_down > scrcur->scr->maxrow + 1)
     {
         row_down = scrcur->scr->maxrow + 1;
         row_up = max(0, row_down - avlrow - 1);
@@ -1462,8 +1463,9 @@ void moveCursorTo(struct SCRCUR *scrcur, int torow, int tocol)
 
     scrcur->cursor->X = tocol + scrcur->scr->sidelen + 1;
     scrcur->cursor->Y = torow;
-    scrcur->initcursor->X = tocol + scrcur->scr->sidelen + 1;
-    scrcur->initcursor->Y = torow;
+    scrcur->initcursor->X = scrcur->cursor->X;
+    scrcur->initcursor->Y = scrcur->cursor->Y;
+    scrcur->count = 0;
 
     scrcur->scr->activestart = scrcur->cursor->Y;
     scrcur->scr->activeend = scrcur->cursor->Y + 1;
@@ -1474,6 +1476,180 @@ void moveCursorTo(struct SCRCUR *scrcur, int torow, int tocol)
     scrcur->scr->endrow = row_down;
 
     initscr(scrcur);
+}
+
+/// @brief Reads first number of output
+/// @return number
+int getfirstoutputnum()
+{
+    OUTPUT = fopen(outputPath, "r");
+    int out = 0;
+
+    char c = fgetc(OUTPUT);
+
+    for (int i = 0; ISNUM(c); i++)
+    {
+        out = out * 10 + (c - '0');
+        c = fgetc(OUTPUT);
+    }
+
+    fclose(OUTPUT);
+    return out;
+}
+
+/// @brief replace
+/// @param scrcur
+/// @param argc
+/// @return index of first occurence (-1 if error occurred)
+int replaceFile(struct SCRCUR *scrcur, int argc)
+{
+    char *arg[argc];
+    for (int i = 0; i < argc; i++)
+    {
+        arg[i] = _getarg(i);
+    }
+
+    if (argc >= 5) /*normal*/
+    {
+        if (strcmp(arg[1], "--str1") || strcmp(arg[3], "--str2"))
+        {
+            printErrorInCLI(scrcur, "Invalid command");
+            return -1;
+        }
+
+        if (argc == 5)
+        {
+            int findres = find(scrcur->scr->filepath, arg[2], 0, 0);
+
+            if (!findres)
+            {
+                _clearOutput();
+                return -1;
+            }
+
+            int ix = getfirstoutputnum();
+            _clearOutput();
+
+            _makeACopy(scrcur->scr->filepath);
+            _pasteCopyInto(scrcur->scr->filepath, replace(scrcur->scr->filepath, arg[2], arg[4], 0));
+
+            return ix;
+        }
+        else if (argc == 6)
+        {
+            if (!strcmp(arg[5], "-all"))
+            {
+                int findres = find(scrcur->scr->filepath, arg[2], 0, 0);
+                if (!findres)
+                {
+                    _clearOutput();
+                    return -1;
+                }
+
+                int ix = getfirstoutputnum();
+                _clearOutput();
+
+                _makeACopy(scrcur->scr->filepath);
+                _pasteCopyInto(scrcur->scr->filepath, replace(scrcur->scr->filepath, arg[2], arg[4], -1));
+
+                return ix;
+            }
+            else
+            {
+                printErrorInCLI(scrcur, "Invalid command");
+                return -1;
+            }
+        }
+        else if (argc == 7)
+        {
+            if (!strcmp(arg[5], "-at") && _isnum(arg[6]))
+            {
+                int findres = find(scrcur->scr->filepath, arg[2], AT, _tonum(arg[6]));
+                if (!findres)
+                {
+                    _clearOutput();
+                    return -1;
+                }
+
+                int ix = getfirstoutputnum();
+                _clearOutput();
+
+                _makeACopy(scrcur->scr->filepath);
+                _pasteCopyInto(scrcur->scr->filepath, replace(scrcur->scr->filepath, arg[2], arg[4], _tonum(arg[6])));
+
+                return ix;
+            }
+            else
+            {
+                printErrorInCLI(scrcur, "Invalid command");
+                return -1;
+            }
+        }
+        else
+        {
+            printErrorInCLI(scrcur, "Invalid command");
+            return -1;
+        }
+    }
+    else
+    {
+        printErrorInCLI(scrcur, "Invalid command");
+        return -1;
+    }
+}
+
+/// @brief Converts ix to row and col
+/// @param path
+/// @param ix
+/// @param row (pass by pointer)
+/// @param col (pass by pointer)
+void getRowColbyindex(char *path, int ix, int *row, int *col)
+{
+    FILE *fp = openPath(path);
+
+    if (!fp)
+        return;
+
+    char c = fgetc(fp);
+    int cnt = 0;
+    *row = 1;
+    *col = 0;
+    int newline = (c == '\n');
+
+    while (c != EOF)
+    {
+        if (newline == 1)
+        {
+            (*row)++;
+            *col = 0;
+            newline = 0;
+        }
+
+        if (c == '\n')
+        {
+            newline = 1;
+        }
+
+        if (cnt == ix)
+        {
+            fclose(fp);
+            return;
+        }
+
+        c = fgetc(fp);
+        (*col)++;
+        cnt++;
+    }
+
+    if (cnt == ix)
+    {
+        return;
+    }
+
+    *col = -1;
+    *row = -1;
+
+    fclose(fp);
 }
 
 /// @brief Handles ':' commands in CLI
@@ -1546,6 +1722,16 @@ void handleColonCommands(struct SCRCUR *scrcur, char *str, int row)
     }
     else if (!strcmp(arg[0], RPLC_COM))
     {
+        int ix = replaceFile(scrcur, argc);
+        if (ix != -1)
+        {
+            int crow, ccol;
+            getRowColbyindex(scrcur->scr->filepath, ix, &crow, &ccol);
+            if (!(crow == -1 || ccol == -1))
+            {
+                moveCursorTo(scrcur, crow, ccol);
+            }
+        }
     }
     else
     {
@@ -1837,8 +2023,6 @@ void navigateScr(struct SCRCUR *scrcur, char com)
 void runFile(char *path, enum STATE state)
 {
     struct SCRCUR *scrcur = showfile(path, state);
-
-    moveCursorTo(scrcur, 102, 240);
 
     char c;
 

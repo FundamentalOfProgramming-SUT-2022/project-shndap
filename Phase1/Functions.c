@@ -3826,11 +3826,11 @@ void arman(char *inp, char *str)
                 _makeACopy(arg[4]);
                 if (arg[1][5] == '1')
                 {
-                    _pasteCopyInto(arg[4], replace(arg[4], arg[2], str, -2));
+                    _pasteCopyInto(arg[4], replace(arg[4], arg[2], str, 0));
                 }
                 else
                 {
-                    _pasteCopyInto(arg[4], replace(arg[4], str, arg[2], -2));
+                    _pasteCopyInto(arg[4], replace(arg[4], str, arg[2], 0));
                 }
             }
             else if (argc == 6)
@@ -3839,11 +3839,11 @@ void arman(char *inp, char *str)
                 {
                     if (arg[1][5] == '1')
                     {
-                        _pasteCopyInto(arg[4], replace(arg[4], arg[2], str, -2));
+                        _pasteCopyInto(arg[4], replace(arg[4], arg[2], str, -1));
                     }
                     else
                     {
-                        _pasteCopyInto(arg[4], replace(arg[4], str, arg[2], -2));
+                        _pasteCopyInto(arg[4], replace(arg[4], str, arg[2], -1));
                     }
                 }
                 else
@@ -3858,11 +3858,11 @@ void arman(char *inp, char *str)
                 {
                     if (arg[1][5] == '1')
                     {
-                        _pasteCopyInto(arg[4], replace(arg[4], arg[2], str, -2));
+                        _pasteCopyInto(arg[4], replace(arg[4], arg[2], str, _tonum(arg[6])));
                     }
                     else
                     {
-                        _pasteCopyInto(arg[4], replace(arg[4], str, arg[2], -2));
+                        _pasteCopyInto(arg[4], replace(arg[4], str, arg[2], _tonum(arg[6])));
                     }
                 }
                 else
@@ -4345,7 +4345,7 @@ void handler(char *inp)
             if (argc == 7)
             {
                 _makeACopy(arg[6]);
-                _pasteCopyInto(arg[6], replace(arg[6], arg[2], arg[4], -2));
+                _pasteCopyInto(arg[6], replace(arg[6], arg[2], arg[4], 0));
             }
             else if (argc == 8)
             {
