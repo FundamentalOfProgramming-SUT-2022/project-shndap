@@ -966,11 +966,21 @@ int __index(char *__file_path, int row, int col)
         _char += !found;
         if (c == '\n')
         {
+            if (_r == row && _c == col)
+            {
+                found = 1;
+            }
+
             _c = 0;
             _r++;
         }
         c = fgetc(fp);
         fputc(c, nfp);
+    }
+
+    if (_r == row && _c == col)
+    {
+        found = 1;
     }
 
     fclose(fp);
@@ -1663,7 +1673,7 @@ int removeStr(char *__file_path, int row, int col, int count, int forward)
         return 0;
     }
 
-    if (e_ix < 0 || e_ix >= chars)
+    if (e_ix < 0 || e_ix > chars)
     {
         _writeToOutput("~!ERROR: Invalid count\n");
         fclose(fp);
@@ -1675,7 +1685,7 @@ int removeStr(char *__file_path, int row, int col, int count, int forward)
     }
 
     int s_ix = (e_ix < ix ? e_ix : ix),
-        f_ix = (e_ix > ix ? e_ix : ix) - 1;
+        f_ix = (e_ix > ix ? e_ix : ix);
 
     char c_c;
 
@@ -3478,7 +3488,7 @@ void compareFiles(char *this_path, char *that_path)
 }
 
 /// @brief Number of subdirectories in cwd
-/// @return 
+/// @return
 int __cntsub()
 {
     int out = 0;
@@ -3506,7 +3516,7 @@ int __cntsub()
 /// @brief Helper function for tree
 /// @param depth current depth of tree
 /// @param precspace preceding space
-void __tree(int depth, int precspace, int* printPer)
+void __tree(int depth, int precspace, int *printPer)
 {
     if (depth == 0)
         return;
@@ -3528,7 +3538,8 @@ void __tree(int depth, int precspace, int* printPer)
         if ((de->d_name)[0] == '.')
             continue;
 
-        for (int k = 0; k < precspace; k++){
+        for (int k = 0; k < precspace; k++)
+        {
             _writeToOutput(printPer[k] ? "~%" : " ");
         }
 
@@ -3556,7 +3567,7 @@ void tree(int depth)
 
     _writeToOutput("root\n");
 
-    int* printPer = calloc(1024, sizeof(int));
+    int *printPer = calloc(1024, sizeof(int));
     printPer[0] = __cntsub() != 1;
 
     __tree(depth, 0, printPer);
