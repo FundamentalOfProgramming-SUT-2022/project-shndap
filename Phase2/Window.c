@@ -69,19 +69,30 @@ const char UPCOM = 'k';
 const char DNCOM = 'j';
 const char LTCOM = 'h';
 const char RTCOM = 'l';
+const char INDCOM = '=';
+const char PH1COM = ':';
+const char FNDCOM = '/';
+const char NXTCOM = 'n';
+const char UDOCOM = 'u';
 const char CPYCOM = 'y';
 const char CUTCOM = 't';
 const char DELCOM = 'd';
 const char PSTCOM = 'p';
+const char CMDCOM = '!';
 const char TO_NORMAL = esc_key;
-const char TO_INSERT[] = "!INSERT";
-const char TO_VISUAL[] = "!VISUAL";
+const char TO_INSERT[] = "INSERT";
+const char TO_VISUAL[] = "VISUAL";
+const char SAVE_COM[] = "save";
+const char SVAS_COM[] = "saveas";
+const char OPEN_COM[] = "open";
+const char UNDO_COM[] = "undo";
+const char RPLC_COM[] = "replace";
 
 enum STATE
 {
     NORMAL, /* CLI */
     INSERT, /* Typing text */
-    VISUAL  /* Edit text in Bulk */
+    VISUAL  /* Edit text in bulk */
 };
 
 const char *STATESTR[] =
@@ -839,11 +850,11 @@ void handleCommands(struct SCRCUR *scrcur, char *str, int row)
 {
     if (str[0] == '!')
     {
-        if(!strcmp(str, TO_VISUAL))
+        if (!strcmp(str, TO_VISUAL))
         {
             scrcur->scr->state = VISUAL;
         }
-        else if(!strcmp(str, TO_INSERT))
+        else if (!strcmp(str, TO_INSERT))
         {
             scrcur->scr->state = INSERT;
         }
@@ -860,6 +871,31 @@ void handleCommands(struct SCRCUR *scrcur, char *str, int row)
             return;
         }
     }
+    else if (str[0] == PH1COM)
+    {
+        if (!strcmp(str, SAVE_COM))
+        {
+        }
+        else if (!strcmp(str, SVAS_COM))
+        {
+        }
+        else if (!strcmp(str, OPEN_COM))
+        {
+        }
+        else if (!strcmp(str, UNDO_COM))
+        {
+        }
+        else if (!strcmp(str, RPLC_COM))
+        {
+        }
+        else
+        {
+            /* PHASE 1 */
+        }
+    }
+    else if (str[0] == 'u')
+    {
+    }
 }
 
 /// @brief Handles scr according to com
@@ -873,10 +909,47 @@ void navigateScr(struct SCRCUR *scrcur, char com)
     {
         scrcur->scr->state = NORMAL;
         initscr(scrcur);
-        char *str = calloc(32768, sizeof(char));
         setCursorPos(strlen(" Command Line: "), row);
-        gets(str);
-        handleCommands(scrcur, str, row);
+        return;
+    }
+
+    if (scrcur->scr->state == NORMAL)
+    {
+        if (com == UDOCOM)
+        {
+            /* undo */
+        }
+        else if (com == PH1COM)
+        {
+            char *str = calloc(32768, sizeof(char));
+            gets(str);
+            /* : commands */
+            free(str);
+        }
+        else if (com == CMDCOM)
+        {
+            char *str = calloc(32768, sizeof(char));
+            gets(str);
+            /* ! commands */
+            free(str);
+        }
+        else if (com == FNDCOM)
+        {
+            char *str = calloc(32768, sizeof(char));
+            gets(str);
+            /* find */
+            /* prolly handle nxtcom in here */
+            free(str);
+        }
+        else if (com == NXTCOM)
+        {
+            /* next occurence */
+        }
+        else
+        {
+            /* inavlid */
+        }
+
         return;
     }
 
@@ -896,7 +969,7 @@ void navigateScr(struct SCRCUR *scrcur, char com)
         {
             copyStr(scrcur->scr->filepath, firstcursor->Y, firstcursor->X - scrcur->scr->sidelen - 1, scrcur->count,
                     SIGN(scrcur->count));
-            scrcur->scr->state = NORMAL;
+            scrcur->scr->state = INSERT;
             return;
         }
         else if (com == CUTCOM)
@@ -914,7 +987,7 @@ void navigateScr(struct SCRCUR *scrcur, char com)
             scrcur->scr->activestart = scrcur->cursor->Y;
             scrcur->scr->activeend = scrcur->cursor->Y + 1;
 
-            scrcur->scr->state = NORMAL;
+            scrcur->scr->state = INSERT;
             return;
         }
         else if (com == DELCOM)
@@ -932,12 +1005,12 @@ void navigateScr(struct SCRCUR *scrcur, char com)
             scrcur->scr->activestart = scrcur->cursor->Y;
             scrcur->scr->activeend = scrcur->cursor->Y + 1;
 
-            scrcur->scr->state = NORMAL;
+            scrcur->scr->state = INSERT;
             return;
         }
     }
 
-    if (scrcur->scr->state == NORMAL)
+    if (scrcur->scr->state == INSERT)
     {
         if (com == PSTCOM)
         {
@@ -1086,7 +1159,7 @@ void navigateScr(struct SCRCUR *scrcur, char com)
             scrcur->scr->activeend = scrcur->cursor->Y + 1;
         }
     }
-    else if (scrcur->scr->state == NORMAL)
+    else if (scrcur->scr->state == INSERT)
     {
         scrcur->scr->activestart = scrcur->cursor->Y;
         scrcur->scr->activeend = scrcur->cursor->Y + 1;
