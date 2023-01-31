@@ -843,58 +843,226 @@ struct SCRCUR *showfile(char *path, enum STATE state)
     return scrcur;
 }
 
-/// @brief Handles CLI
+/// @brief Handles Changing mode commands in CLI
 /// @param str
 /// @param row screen size in rows
-void handleCommands(struct SCRCUR *scrcur, char *str, int row)
+void handleChmodCommands(struct SCRCUR *scrcur, char *str, int row)
 {
-    if (str[0] == '!')
+    if (!strcmp(str, TO_VISUAL))
     {
-        if (!strcmp(str, TO_VISUAL))
+        scrcur->scr->state = VISUAL;
+    }
+    else if (!strcmp(str, TO_INSERT))
+    {
+        scrcur->scr->state = INSERT;
+    }
+    else
+    {
+        initscr(scrcur);
+        _writeToOutput("~!ERROR: Invalid Mode");
+        setCursorPos(strlen(" Command Line: "), row);
+        _showOutput();
+
+        sleep(1);
+
+        _clearOutput();
+        return;
+    }
+}
+
+/// @brief Extracts args from inp
+/// @param inp
+/// @return Number of arguments
+int buildArgs(char *inp)
+{
+    int argc = 0;
+    int lenc = strlen(inp);
+    char currarg[32768];
+    currarg[0] = '\0';
+    int inQuote = 0;
+    int currarglen = 0;
+
+    for (int i = 0; i < lenc; i++)
+    {
+        if (inp[i] == ' ')
         {
-            scrcur->scr->state = VISUAL;
+            if (inQuote)
+            {
+                strncat(currarg, inp + i, 1);
+                currarglen++;
+            }
+            else
+            {
+                currarg[currarglen] = '\0';
+                _addArg(currarg);
+                currarglen = 0;
+                currarg[0] = '\0';
+                argc++;
+            }
         }
-        else if (!strcmp(str, TO_INSERT))
+        else if (inp[i] == '"')
         {
-            scrcur->scr->state = INSERT;
+            int isrealquote = (i != 0 && inp[i - 1] != '\\');
+
+            if (isrealquote)
+            {
+                inQuote = !inQuote;
+            }
+            else
+            {
+                strncat(currarg, inp + i, 1);
+                currarglen++;
+            }
+        }
+        else if (inp[i] == '\\')
+        {
+            if (i != lenc - 1)
+            {
+                if (inp[i + 1] == '\\')
+                {
+                    strncat(currarg, inp + i, 1);
+                    currarglen++;
+                    i++;
+                    continue;
+                }
+                else
+                {
+                    if (inp[i + 1] == 'n')
+                    {
+                        strcat(currarg, "\n");
+                        i++;
+                        currarglen++;
+                        continue;
+                    }
+                    else if (inp[i + 1] == 't')
+                    {
+                        strcat(currarg, "\t");
+                        i++;
+                        currarglen++;
+                        continue;
+                    }
+                    else if (inp[i + 1] == 'v')
+                    {
+                        strcat(currarg, "\v");
+                        i++;
+                        currarglen++;
+                        continue;
+                    }
+                    else if (inp[i + 1] == '"')
+                    {
+                        strcat(currarg, "\"");
+                        i++;
+                        currarglen++;
+                        continue;
+                    }
+                    else
+                    {
+                        strncat(currarg, inp + i, 1);
+                        currarglen++;
+                        continue;
+                    }
+                }
+            }
+            else
+            {
+                strncat(currarg, inp + i, 1);
+                currarglen++;
+            }
         }
         else
         {
-            initscr(scrcur);
-            _writeToOutput("~!ERROR: Invalid Mode");
-            setCursorPos(strlen(" Command Line: "), row);
-            _showOutput();
+            strncat(currarg, inp + i, 1);
+            currarglen++;
+        }
 
-            sleep(1);
+        if (currarglen >= 32768)
+        {
+            _writeToOutput("~!ERROR: Argument size exceeded (32768 characters)\n");
+            return 0;
+        }
+    }
 
-            _clearOutput();
+    if (currarglen)
+    {
+        currarg[currarglen] = '\0';
+        _addArg(currarg);
+        argc++;
+        currarg[0] = '\0';
+        currarglen = 0;
+    }
+
+    return argc;
+}
+
+/// @brief Empties a file
+/// @param path 
+void emptyFile(char* path)
+{
+    int chars, lines, words;
+    __fileLen(path, &chars, &lines, &words);
+
+    removeStr(path, 1, 0, chars, 1);
+    _showOutput();
+}
+
+/// @brief Handles ':' commands in CLI
+/// @param str
+/// @param row screen size in rows
+void handleColonCommands(struct SCRCUR *scrcur, char *str, int row)
+{
+    int argc = buildArgs(str);
+
+    char *arg[argc];
+    for (int i = 0; i < argc; i++)
+    {
+        arg[i] = _getarg(i);
+    }
+
+
+
+    if (!strcmp(arg[0], SAVE_COM))
+    {
+        /* save */
+    }
+    else if (!strcmp(arg[0], SVAS_COM))
+    {
+        if (argc != 2)
+        {
+            /* invalid command */
             return;
         }
-    }
-    else if (str[0] == PH1COM)
-    {
-        if (!strcmp(str, SAVE_COM))
+
+        if(__fileExists(arg[1]))
         {
-        }
-        else if (!strcmp(str, SVAS_COM))
-        {
-        }
-        else if (!strcmp(str, OPEN_COM))
-        {
-        }
-        else if (!strcmp(str, UNDO_COM))
-        {
-        }
-        else if (!strcmp(str, RPLC_COM))
-        {
+            /* file already exists */
+            if(/*wants to replace*/1)
+            {
+
+            }
+            else
+            {
+                return;
+            }
         }
         else
         {
-            /* PHASE 1 */
+
         }
+
+        
     }
-    else if (str[0] == 'u')
+    else if (!strcmp(arg[0], OPEN_COM))
     {
+    }
+    else if (!strcmp(arg[0], UNDO_COM))
+    {
+    }
+    else if (!strcmp(arg[0], RPLC_COM))
+    {
+    }
+    else
+    {
+        /* PHASE 1 */
     }
 }
 
@@ -917,7 +1085,7 @@ void navigateScr(struct SCRCUR *scrcur, char com)
     {
         if (com == UDOCOM)
         {
-            /* undo */
+            undo(scrcur->scr->filepath);
         }
         else if (com == PH1COM)
         {
@@ -930,7 +1098,7 @@ void navigateScr(struct SCRCUR *scrcur, char com)
         {
             char *str = calloc(32768, sizeof(char));
             gets(str);
-            /* ! commands */
+            handleChmodCommands(scrcur, str, row);
             free(str);
         }
         else if (com == FNDCOM)
@@ -1181,8 +1349,10 @@ void runFile(char *path, enum STATE state)
 
 int main()
 {
-    init();
-    runFile("/root/blah/j.txt", NORMAL);
+    // init();
+    // runFile("/root/blah/j.txt", NORMAL);
+
+    emptyFile("/root/blah/j.txt");
 
     // Handler("find --str \"4* 1\" --file /root/bruh/wtf/this/is/a/test/myfile1.txt -all -byword");
     // struct SCRCUR *scrcur = showfile("/root/bruh/wtf/this/is/a/test/myfile1.txt", VISUAL);
