@@ -1,0 +1,32 @@
+
+=================TYPE 'OPEN' TO OPEN A BLANK FILE=================
+ ____    ____   ____  ____     ____   ____   _____   ____    ____  
+|_   \  /   _| |_  _||_  _|   |_  _| |_  _| |_   _| |_   \  /   _| 
+  |   \/   |     \ \  / /       \ \   / /     | |     |   \/   |   
+  | |\  /| |      \ \/ /         \ \ / /      | |     | |\  /| |   
+ _| |_\/_| |_     _|  |_          \ ' /      _| |_   _| |_\/_| |_  
+|_____||_____|   |______|          \_/      |_____| |_____||_____| 
+                                                                   
+
+Mode manipulation commands:
+	ESC		Switch to NORMAL (CLI) mode
+	!VISUAL	(In NORMAL mode) Switches to VISUAL
+	!INSERT	(In NORMAL mode) Switches to INSERT
+
+Cursor commands:
+	h	Left
+	j	Down
+	k	Up
+	l	Right
+
+Shortcuts:
+	/<exp>	(Normal mode)	Find all occurences of <exp>
+	n		(After /<exp>)	Go to next occurence of <exp>
+	=		(Normal mode) 	Auto-Indent
+	u		(Normal mode)	Undo
+	y		(Visual mode)	Copy
+	t		(Visual mode)	Cut
+	d		(Visual mode)	Delete
+	p		(Visual mode)	Paste
+
+You can also use phase 1 commands by inserting a ':' in the begginning.

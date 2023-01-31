@@ -18,6 +18,7 @@
 
 #define COLOR(bg, fg) (bg * 16 + fg)
 #define SIGN(x) (x > 0 ? +1 : -1)
+#define esc_key 27
 
 enum COLORVAL
 {
@@ -47,6 +48,7 @@ enum COLORINGSTATE
     HIGHLIGHTED
 };
 
+/* Theme Colors */
 const WORD TEXT_COLOR = COLOR(BLACK, WHITE);
 const WORD HEAD_COLOR = COLOR(LIGHTGRAY, BLACK);
 const WORD SIDE_COLOR = COLOR(BLACK, DARKGRAY);
@@ -62,20 +64,24 @@ const WORD CORR_COLOR[] = {COLOR(BLACK, YELLOW), COLOR(DARKGRAY, YELLOW), COLOR(
 const WORD QUOT_COLOR[] = {COLOR(BLACK, BROWN), COLOR(DARKGRAY, BROWN), COLOR(LIGHTBLUE, BROWN), COLOR(YELLOW, BROWN)};
 const WORD STATECOLOR[] = {COLOR(CYAN, BLACK), COLOR(GREEN, BLACK), COLOR(YELLOW, BLACK)};
 
+/* Commands */
 const char UPCOM = 'k';
 const char DNCOM = 'j';
 const char LTCOM = 'h';
-const char RTCOM = 'i';
+const char RTCOM = 'l';
 const char CPYCOM = 'y';
 const char CUTCOM = 't';
 const char DELCOM = 'd';
 const char PSTCOM = 'p';
+const char TO_NORMAL = esc_key;
+const char TO_INSERT[] = "!INSERT";
+const char TO_VISUAL[] = "!VISUAL";
 
 enum STATE
 {
-    NORMAL,
-    INSERT,
-    VISUAL
+    NORMAL, /* CLI */
+    INSERT, /* Typing text */
+    VISUAL  /* Edit text in Bulk */
 };
 
 const char *STATESTR[] =
@@ -233,10 +239,10 @@ WORD curcol()
 }
 
 /// @brief Get color for output
-/// @param openparn 
-/// @param openbrkt 
-/// @param opencurl 
-/// @param quote 
+/// @param openparn
+/// @param openbrkt
+/// @param opencurl
+/// @param quote
 /// @param c current character
 /// @return color
 WORD getcol(int openparn, int openbrkt, int opencurl, int quote, char c)
@@ -254,39 +260,45 @@ WORD getcol(int openparn, int openbrkt, int opencurl, int quote, char c)
     else
         colstate = DEFAULT;
 
-    if(quote || c == '"')
+    if (quote || c == '"')
     {
         return QUOT_COLOR[colstate];
     }
 
-    if(c == '{' || c == '(' || c == '[')
+    if (c == '{' || c == '(' || c == '[')
     {
         return CORR_COLOR[colstate];
     }
 
-    if(c == ')')
+    if (c == ')')
     {
-        if(openparn < 0)    return DNGE_COLOR[colstate];
-        else                return CORR_COLOR[colstate];
+        if (openparn < 0)
+            return DNGE_COLOR[colstate];
+        else
+            return CORR_COLOR[colstate];
     }
 
-    if(c == '}')
+    if (c == '}')
     {
-        if(opencurl < 0)    return DNGE_COLOR[colstate];
-        else                return CORR_COLOR[colstate];
+        if (opencurl < 0)
+            return DNGE_COLOR[colstate];
+        else
+            return CORR_COLOR[colstate];
     }
 
-    if(c == ']')
+    if (c == ']')
     {
-        if(openbrkt < 0)    return DNGE_COLOR[colstate];
-        else                return CORR_COLOR[colstate];
+        if (openbrkt < 0)
+            return DNGE_COLOR[colstate];
+        else
+            return CORR_COLOR[colstate];
     }
 
     return current;
 }
 
 /// @brief Changes color to col
-/// @param col 
+/// @param col
 void tocol(WORD col)
 {
     SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), col);
@@ -648,7 +660,8 @@ void printOutputToScr(enum STATE state, int sidelen, int start, int end, int sta
             }
             else
             {
-                if (Y >= start && Y < end && X >= startcol && X < endcol){
+                if (Y >= start && Y < end && X >= startcol && X < endcol)
+                {
                     WORD prevcol = curcol();
                     tocol(getcol(openparn, openbrkt, opencurl, quote, c));
                     printf("~");
@@ -737,7 +750,7 @@ void footer(enum STATE state, const char *desc, int row, int col)
 /// @brief Initializes a screen
 /// @param scrcur current screen and cursor
 /// @param cursor
-void initscr(char *path, struct SCRCUR *scrcur)
+void initscr(struct SCRCUR *scrcur)
 {
     system("cls");
     int rows, cols;
@@ -752,7 +765,7 @@ void initscr(char *path, struct SCRCUR *scrcur)
     int safeendcol = (scrcur->scr->endcol - scrcur->scr->startcol > cols - sl - 2 ? cols - sl - 2 : scrcur->scr->endcol);
     scrcur->scr->endcol = safeendcol;
 
-    cat(path);
+    cat(scrcur->scr->filepath);
     printOutputToScr(scrcur->scr->state, sl, scrcur->scr->startrow, safeendrow, scrcur->scr->startcol, safeendcol, rows, scrcur->cursor, scrcur->initcursor);
     _clearOutput();
 
@@ -805,7 +818,7 @@ struct SCRCUR *showfile(char *path, enum STATE state)
     scrcur->scr = (struct SCREEN *)malloc(sizeof(struct SCREEN));
     scrcur->initcursor = (COORD *)malloc(sizeof(COORD));
 
-//                                                        ********
+    //                                                        ********
     scrcur->scr = newScreen(path, filename, linesize, 1, lines + 1, maxcol, 1, lines + 2, 0, maxcol, 1, 2, maxlen + 1, state, desc);
     scrcur->cursor->X = scrcur->scr->sidelen + 1;
     scrcur->cursor->Y = 1;
@@ -814,9 +827,39 @@ struct SCRCUR *showfile(char *path, enum STATE state)
 
     scrcur->count = 0;
 
-    initscr(path, scrcur);
+    initscr(scrcur);
 
     return scrcur;
+}
+
+/// @brief Handles CLI
+/// @param str
+/// @param row screen size in rows
+void handleCommands(struct SCRCUR *scrcur, char *str, int row)
+{
+    if (str[0] == '!')
+    {
+        if(!strcmp(str, TO_VISUAL))
+        {
+            scrcur->scr->state = VISUAL;
+        }
+        else if(!strcmp(str, TO_INSERT))
+        {
+            scrcur->scr->state = INSERT;
+        }
+        else
+        {
+            initscr(scrcur);
+            _writeToOutput("~!ERROR: Invalid Mode");
+            setCursorPos(strlen(" Command Line: "), row);
+            _showOutput();
+
+            sleep(1);
+
+            _clearOutput();
+            return;
+        }
+    }
 }
 
 /// @brief Handles scr according to com
@@ -825,6 +868,17 @@ void navigateScr(struct SCRCUR *scrcur, char com)
 {
     int row, col;
     scrsize(&col, &row);
+
+    if (com == TO_NORMAL || scrcur->scr->state == NORMAL)
+    {
+        scrcur->scr->state = NORMAL;
+        initscr(scrcur);
+        char *str = calloc(32768, sizeof(char));
+        setCursorPos(strlen(" Command Line: "), row);
+        gets(str);
+        handleCommands(scrcur, str, row);
+        return;
+    }
 
     if (scrcur->scr->state == VISUAL)
     {
@@ -920,7 +974,6 @@ void navigateScr(struct SCRCUR *scrcur, char com)
     }
     else if (com == DNCOM)
     {
-        printf("|%d %d|", scrcur->cursor->Y, scrcur->scr->maxrow);
         if (scrcur->cursor->Y + 1 != scrcur->scr->maxrow + 1)
             scrcur->count += scrcur->scr->linesize[scrcur->cursor->Y];
 
@@ -1044,14 +1097,11 @@ void runFile(char *path, enum STATE state)
 {
     struct SCRCUR *scrcur = showfile(path, state);
 
-    printf("%d %d", scrcur->cursor->X, scrcur->cursor->Y);
-
     char c = getch();
     while (c != 'x')
     {
         navigateScr(scrcur, c);
-        initscr(path, scrcur);
-        printf("%d", scrcur->count);
+        initscr(scrcur);
         c = getch();
     }
 }
@@ -1059,8 +1109,7 @@ void runFile(char *path, enum STATE state)
 int main()
 {
     init();
-
-    runFile("/root/bruh/wtf/this/is/a/test/myfile2.txt", NORMAL);
+    runFile("/root/blah/j.txt", NORMAL);
 
     // Handler("find --str \"4* 1\" --file /root/bruh/wtf/this/is/a/test/myfile1.txt -all -byword");
     // struct SCRCUR *scrcur = showfile("/root/bruh/wtf/this/is/a/test/myfile1.txt", VISUAL);
