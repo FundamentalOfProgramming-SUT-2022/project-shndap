@@ -909,8 +909,6 @@ void __fileLen(char *__file_path, int *characters, int *lines, int *words)
         fputc(c, nfp);
     }
 
-    printf("%d", *characters);
-
     fclose(fp);
     fclose(nfp);
 
@@ -4568,30 +4566,30 @@ void Handler(char *inp)
     _clearOutput();
 }
 
-// int main()
-// {
-//     init();
+int main()
+{
+    init();
 
-//     char s[32768] = "find --str \"*a quote\" --file \"/root/this is a test filder/hi bruh.txt\"";
+    char s[32768] = "find --str \"*a quote\" --file \"/root/this is a test filder/hi bruh.txt\"";
 
-//     __boldpurple__();
-//     printf(">>> ");
-//     __reset__();
+    __boldpurple__();
+    printf(">>> ");
+    __reset__();
 
-//     gets(s);
+    gets(s);
 
-//     while (strcmp(s, "exit"))
-//     {
-//         Handler(s);
+    while (strcmp(s, "exit"))
+    {
+        Handler(s);
 
-//         __boldpurple__();
-//         printf(">>> ");
-//         __reset__();
+        __boldpurple__();
+        printf(">>> ");
+        __reset__();
 
-//         gets(s);
-//     }
+        gets(s);
+    }
 
-//     finish();
+    finish();
 
-//     return 0;
-// }
+    return 0;
+}
