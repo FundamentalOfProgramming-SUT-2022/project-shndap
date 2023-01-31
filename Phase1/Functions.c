@@ -909,6 +909,8 @@ void __fileLen(char *__file_path, int *characters, int *lines, int *words)
         fputc(c, nfp);
     }
 
+    printf("%d", *characters);
+
     fclose(fp);
     fclose(nfp);
 
@@ -1692,7 +1694,7 @@ int removeStr(char *__file_path, int row, int col, int count, int forward)
     for (int c_ix = 0; c_ix < chars; c_ix++)
     {
         c_c = fgetc(fp);
-        if (c_ix < s_ix || c_ix > f_ix)
+        if (c_ix < s_ix || c_ix >= f_ix)
         {
             fputc(c_c, nfp);
         }
@@ -1700,8 +1702,6 @@ int removeStr(char *__file_path, int row, int col, int count, int forward)
         {
         }
     }
-
-    /**/
 
     fclose(fp);
     fclose(nfp);
@@ -4568,30 +4568,30 @@ void Handler(char *inp)
     _clearOutput();
 }
 
-int main()
-{
-    init();
+// int main()
+// {
+//     init();
 
-    char s[32768] = "find --str \"*a quote\" --file \"/root/this is a test filder/hi bruh.txt\"";
+//     char s[32768] = "find --str \"*a quote\" --file \"/root/this is a test filder/hi bruh.txt\"";
 
-    __boldpurple__();
-    printf(">>> ");
-    __reset__();
+//     __boldpurple__();
+//     printf(">>> ");
+//     __reset__();
 
-    gets(s);
+//     gets(s);
 
-    while (strcmp(s, "exit"))
-    {
-        Handler(s);
+//     while (strcmp(s, "exit"))
+//     {
+//         Handler(s);
 
-        __boldpurple__();
-        printf(">>> ");
-        __reset__();
+//         __boldpurple__();
+//         printf(">>> ");
+//         __reset__();
 
-        gets(s);
-    }
+//         gets(s);
+//     }
 
-    finish();
+//     finish();
 
-    return 0;
-}
+//     return 0;
+// }
