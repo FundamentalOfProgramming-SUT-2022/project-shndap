@@ -19,6 +19,7 @@
 #define COLOR(bg, fg) (bg * 16 + fg)
 #define SIGN(x) (x > 0 ? +1 : -1)
 #define ISNUM(x) (x >= '0' && x <= '9')
+#define TONUM(x) (x - '0')
 #define esc_key 27
 
 enum COLORVAL
@@ -153,12 +154,48 @@ struct SCREEN *newScreen(char *_initfilepath, char *_filepath, char *_filename, 
     return new;
 }
 
+struct FINDDATATYPE
+{
+    int *first_ix;
+    int *last_ix;
+    int cnt;
+};
+
+/// @brief creates a new finddatatype
+/// @param _fix first_ix
+/// @param _six last_ix
+/// @param _cnt cnt
+/// @return data type
+struct FINDDATATYPE *newfinddatatype(int *_fix, int *_six, int _cnt)
+{
+    struct FINDDATATYPE *new = (struct FINDDATATYPE *)malloc(sizeof(struct FINDDATATYPE));
+
+    new->first_ix = _fix;
+    new->last_ix = _six;
+    new->cnt = _cnt;
+
+    return new;
+}
+
+/// @brief Get finddata[at]
+/// @param fdt
+/// @param at
+/// @param _fix pass by pointer
+/// @param _six pass by pointer
+void getfinddata(struct FINDDATATYPE *fdt, int at, int *_fix, int *_six)
+{
+    *_fix = fdt->first_ix[at % fdt->cnt];
+    *_six = fdt->last_ix[at % fdt->cnt];
+}
+
 struct SCRCUR
 {
     struct SCREEN *scr;
+    struct FINDDATATYPE *fdt;
     COORD *cursor;
     COORD *initcursor;
     int count;
+    int hghlt;
 };
 
 /// @brief Moves cursor to x, y
@@ -558,7 +595,11 @@ void getlinesize(int *linesize)
 /// @param endcol last column
 /// @param scrrow size of screen
 /// @param cursor
-void printOutputToScr(enum STATE state, int sidelen, int start, int end, int startcol, int endcol, int scrrow, COORD *cursor, COORD *initcursor)
+/// @param highlight if 0, won't highlight
+/// @param fdt finddatatype
+void printOutputToScr(
+    enum STATE state, int sidelen, int start, int end, int startcol, int endcol,
+    int scrrow, COORD *cursor, COORD *initcursor, int highlight, struct FINDDATATYPE *fdt)
 {
     char cwd[512];
     getcwd(cwd, 512);
@@ -587,6 +628,19 @@ void printOutputToScr(enum STATE state, int sidelen, int start, int end, int sta
     int openparn = 0;
     int openbrkt = 0;
     int opencurl = 0;
+    int fdtix = 0;
+    int fdtsix = 0;
+    int fdtlix = 0;
+    int highlighting = 0;
+    int curix = 0;
+
+    if (highlight)
+    {
+        if (fdt->cnt && fdt)
+        {
+            getfinddata(fdt, fdtix++, &fdtsix, &fdtlix);
+        }
+    }
 
     while (c != EOF)
     {
@@ -626,6 +680,22 @@ void printOutputToScr(enum STATE state, int sidelen, int start, int end, int sta
             }
         }
 
+        if (highlight)
+        {
+            if (fdt->cnt && fdt)
+            {
+                if (curix >= fdtsix && curix < fdtlix)
+                {
+                    tohglt();
+                }
+                else if (curix >= fdtlix)
+                {
+                    totext();
+                    getfinddata(fdt, fdtix++, &fdtsix, &fdtlix);
+                }
+            }
+        }
+
         if (Y >= end)
             break;
 
@@ -657,28 +727,33 @@ void printOutputToScr(enum STATE state, int sidelen, int start, int end, int sta
                 setCursorPos(X, Y - start + 1);
             X = 0;
             c = fgetc(OUTPUT);
+            curix++;
             continue;
         }
 
         if (c == '~')
         {
             c = fgetc(OUTPUT);
+            curix++;
             if (c == '!')
             {
                 __red__();
                 c = fgetc(OUTPUT);
+                curix++;
                 continue;
             }
             else if (c == '?')
             {
                 __cyan__();
                 c = fgetc(OUTPUT);
+                curix++;
                 continue;
             }
             else if (c == '&')
             {
                 __red__();
                 c = fgetc(OUTPUT);
+                curix++;
                 continue;
             }
             else
@@ -704,6 +779,7 @@ void printOutputToScr(enum STATE state, int sidelen, int start, int end, int sta
 
         X++;
         c = fgetc(OUTPUT);
+        curix++;
         totext();
     }
 
@@ -789,7 +865,8 @@ void initscr(struct SCRCUR *scrcur)
     scrcur->scr->endcol = safeendcol;
 
     cat(scrcur->scr->filepath);
-    printOutputToScr(scrcur->scr->state, sl, scrcur->scr->startrow, safeendrow, scrcur->scr->startcol, safeendcol, rows, scrcur->cursor, scrcur->initcursor);
+    printOutputToScr(scrcur->scr->state, sl, scrcur->scr->startrow, safeendrow, scrcur->scr->startcol,
+                     safeendcol, rows, scrcur->cursor, scrcur->initcursor, scrcur->hghlt, scrcur->fdt);
     _clearOutput();
 
     footer(scrcur->scr->state, scrcur->scr->desc, rows, cols);
@@ -894,9 +971,9 @@ void pasteFileInto(char *thispath, char *thatpath)
 }
 
 /// @brief Handles ~
-/// @param thispath 
-/// @param thatpath 
-void pasteAndHandleTilde(char* thispath, char* thatpath)
+/// @param thispath
+/// @param thatpath
+void pasteAndHandleTilde(char *thispath, char *thatpath)
 {
     FILE *this = openPath(thispath);
     FILE *that = openPath(thatpath);
@@ -1005,6 +1082,8 @@ struct SCRCUR *showfile(char *path, enum STATE state)
     scrcur->cursor = (COORD *)malloc(sizeof(COORD));
     scrcur->scr = (struct SCREEN *)malloc(sizeof(struct SCREEN));
     scrcur->initcursor = (COORD *)malloc(sizeof(COORD));
+    scrcur->fdt = (struct FINDDATATYPE *)malloc(sizeof(struct FINDDATATYPE));
+    scrcur->hghlt = 0;
 
     emptyFile(untcopy);
     pasteFileInto(path, untcopy);
@@ -1030,6 +1109,7 @@ void handleChmodCommands(struct SCRCUR *scrcur, char *str, int row)
     if (!strcmp(str, TO_VISUAL))
     {
         scrcur->scr->state = VISUAL;
+        *scrcur->initcursor = *scrcur->cursor;
     }
     else if (!strcmp(str, TO_INSERT))
     {
@@ -1579,6 +1659,39 @@ int getfirstoutputnum()
     return out;
 }
 
+/// @brief Get outputs
+/// @param cnt number of numbers in the output
+/// @return an array of numbers
+int *getoutputnums(int cnt)
+{
+    int *out = calloc(cnt, sizeof(int));
+
+    OUTPUT = fopen(outputPath, "r");
+    char c = fgetc(OUTPUT);
+    int ix = 0;
+    int num = 0;
+
+    while (c != EOF)
+    {
+        if (c == ',')
+        {
+            out[ix++] = num;
+            num = 0;
+        }
+        else if (ISNUM(c))
+        {
+            num = num * 10 + TONUM(c);
+        }
+
+        c = fgetc(OUTPUT);
+    }
+
+    out[ix] = num;
+
+    fclose(OUTPUT);
+    return out;
+}
+
 /// @brief replace
 /// @param scrcur
 /// @param argc
@@ -1734,10 +1847,21 @@ void getRowColbyindex(char *path, int ix, int *row, int *col)
     fclose(fp);
 }
 
+/// @brief Moves cursor to a certain index
+/// @param scrcur
+/// @param ix index
+void moveCursorToIndex(struct SCRCUR *scrcur, int ix)
+{
+    int row, col;
+    getRowColbyindex(scrcur->scr->filepath, ix, &row, &col);
+    moveCursorTo(scrcur, row, col);
+}
+
 /// @brief Same as function.c::Handler but doesn't show output
 /// @param inp
 void NoOutputHandler(char *inp)
 {
+    getch();
     chdir(parentDir);
     int n = strlen(inp);
 
@@ -1900,7 +2024,7 @@ void handleColonCommands(struct SCRCUR *scrcur, char *str, int row)
     else
     {
         NoOutputHandler(str);
-        
+
         _makeACopy("/root/.output/out.out");
         _clearOutput();
 
@@ -1920,6 +2044,129 @@ void handleColonCommands(struct SCRCUR *scrcur, char *str, int row)
     }
 
     _deleteArgs();
+}
+
+/// @brief Finds a pattern in the file
+/// @param __file_path file name
+/// @param pat_ pattern to be matched
+/// @return cnt = -3: Invalid Regex, otherwise a finddatatype
+struct FINDDATATYPE *findPh2(char *__file_path, char *pat_)
+{
+    char *path = malloc(512 * sizeof(char));
+    strcpy(path, __file_path);
+
+    int i, foundDot = 0;
+    for (i = (int)strlen(path) - 1; path[i] != '/' && i > -1; i--)
+    {
+        foundDot |= (path[i] == '.');
+    }
+
+    if (i == -1 || !foundDot)
+    {
+        chdir(parentDir);
+        return NULL;
+    }
+
+    char *filename = malloc((unsigned int)((int)strlen(path) - 1 - i) * sizeof(char));
+
+    int _blahblah_ = (int)strlen(path);
+    for (int j = i + 1; j < _blahblah_; j++)
+    {
+        filename[j - i - 1] = path[j];
+    }
+
+    filename[(int)strlen(path) - 1 - i] = '\0';
+    path[i] = '\0';
+
+    char *tok;
+    int isFirst = 1;
+
+    while ((tok = strtok(path, "/")) != NULL)
+    {
+        if (isFirst && strcmp(tok, "root"))
+        {
+            chdir(parentDir);
+            return NULL;
+        }
+
+        isFirst = 0;
+
+        if (chdir(tok))
+        {
+            chdir(parentDir);
+            return NULL;
+        }
+
+        path = NULL;
+    }
+
+    if (!__fileExists(filename))
+    {
+        chdir(parentDir);
+        return NULL;
+    }
+
+    FILE *fp = fopen(filename, "r+");
+
+    char *str = __toString(fp);
+
+    int pats;
+    short *pat = __toPat(pat_, &pats);
+    if ((pats == 1 && pat[0] == -1) || (pats == 2 && pat[0] == -1 && pat[1] == -1))
+    {
+        // _writeToOutput("~!ERROR: Invalid regex\n");
+        return newfinddatatype(NULL, NULL, -3);
+    }
+
+    int cmatch[512];
+    int lmatch[512];
+    int matchno = 0;
+
+    int _dum_ = (int)strlen(str);
+    for (int ii = 0; ii < _dum_; ii++)
+    {
+        int last_ix = ii;
+        int c_index = __find(str, pat, pats, ii, &last_ix);
+        if (c_index != -1)
+        {
+            if (
+                pat[0] == -1 &&
+                (!c_index ||
+                 (c_index && (str[c_index - 1] == ' ' || str[c_index - 1] == '\n' || str[c_index - 1] == '\t'))))
+            {
+                continue;
+            }
+            else if (
+                pat[pats - 1] == -1 &&
+                (last_ix - 1 == _dum_ ||
+                 ((last_ix - 1 != _dum_) && (str[last_ix - 1] == ' ' || str[last_ix - 1] == '\n' || str[last_ix - 1] == '\t'))))
+            {
+                continue;
+            }
+            else
+            {
+                cmatch[matchno] = c_index;
+                lmatch[matchno] = last_ix;
+                matchno++;
+                ii = c_index;
+            }
+        }
+    }
+
+    int *_fix = calloc(matchno, sizeof(int));
+    int *_six = calloc(matchno, sizeof(int));
+
+    for (int ii = 0; ii < matchno; ii++)
+    {
+        _fix[ii] = cmatch[ii];
+        _six[ii] = lmatch[ii];
+    }
+
+    struct FINDDATATYPE *fdt = newfinddatatype(_fix, _six, matchno);
+
+    fclose(fp);
+    chdir(parentDir);
+    return fdt;
 }
 
 /// @brief Handles scr according to com
@@ -1962,13 +2209,67 @@ void navigateScr(struct SCRCUR *scrcur, char com)
         {
             char *str = calloc(32768, sizeof(char));
             gets(str);
-            /* find */
-            /* prolly handle nxtcom in here */
+
+            _deleteArgs();
+            int argc = buildArgs(str);
+
+            if (argc != 1)
+            {
+                _deleteArgs();
+                free(str);
+                return;
+            }
+
+            char *patstr = _getarg(0);
+
+            struct FINDDATATYPE *fdt = findPh2(scrcur->scr->filepath, patstr);
+
+            if (!fdt)
+            {
+                _deleteArgs();
+                free(str);
+                return;
+            }
+
+            if (fdt->cnt == -3)
+            {
+                printErrorInCLI(scrcur, "Invalid regex");
+                _deleteArgs();
+                free(str);
+                return;
+            }
+
+            if (!fdt->cnt)
+            {
+                printMessageInCLI(scrcur, "No match");
+                _deleteArgs();
+                free(str);
+                return;
+            }
+
+            int ix = 0, this_fix, this_lix;
+
+            getfinddata(fdt, ix++, &this_fix, &this_lix);
+            moveCursorToIndex(scrcur, this_fix);
+            scrcur->hghlt = 1;
+            *(scrcur->fdt) = *fdt;
+            initscr(scrcur);
+
+            while (getch() == NXTCOM)
+            {
+                getfinddata(fdt, ix++, &this_fix, &this_lix);
+                moveCursorToIndex(scrcur, this_fix);
+                initscr(scrcur);
+            }
+
+            scrcur->hghlt = 0;
+            _deleteArgs();
             free(str);
         }
-        else if (com == NXTCOM)
+        else if (com == INDCOM)
         {
-            /* next occurence */
+            _makeACopy(scrcur->scr->filepath);
+            _pasteCopyInto(scrcur->scr->filepath, autoIndent(scrcur->scr->filepath));
         }
         else
         {
@@ -1992,16 +2293,18 @@ void navigateScr(struct SCRCUR *scrcur, char com)
 
         if (com == CPYCOM)
         {
-            int changed = copyStr(scrcur->scr->filepath, firstcursor->Y, firstcursor->X - scrcur->scr->sidelen - 1, scrcur->count,
-                                  SIGN(scrcur->count));
-            scrcur->scr->saved = !changed;
+            copyStr(scrcur->scr->filepath, firstcursor->Y, firstcursor->X - scrcur->scr->sidelen - 1,
+                    scrcur->count, SIGN(scrcur->count));
             scrcur->scr->state = INSERT;
             return;
         }
         else if (com == CUTCOM)
         {
+            _makeACopy(scrcur->scr->filepath);
             int changed = cutStr(scrcur->scr->filepath, firstcursor->Y, firstcursor->X - scrcur->scr->sidelen - 1, scrcur->count,
                                  SIGN(scrcur->count));
+
+            _pasteCopyInto(scrcur->scr->filepath, changed);
 
             if (cmpCursor(scrcur->cursor, scrcur->initcursor) == 1)
             {
@@ -2021,8 +2324,10 @@ void navigateScr(struct SCRCUR *scrcur, char com)
         }
         else if (com == DELCOM)
         {
+            _makeACopy(scrcur->scr->filepath);
             int changed = removeStr(scrcur->scr->filepath, firstcursor->Y, firstcursor->X - scrcur->scr->sidelen - 1, scrcur->count,
                                     SIGN(scrcur->count));
+            _pasteCopyInto(scrcur->scr->filepath, changed);
 
             if (cmpCursor(scrcur->cursor, scrcur->initcursor) == 1)
             {
@@ -2046,7 +2351,9 @@ void navigateScr(struct SCRCUR *scrcur, char com)
     {
         if (com == PSTCOM)
         {
+            _makeACopy(scrcur->scr->filepath);
             int changed = pasteStr(scrcur->scr->filepath, scrcur->cursor->Y, scrcur->cursor->X - scrcur->scr->sidelen - 1);
+            _pasteCopyInto(scrcur->scr->filepath, changed);
             scrcur->scr->saved = 0;
             scrcur->scr->saved = !changed;
 
