@@ -587,11 +587,16 @@ void _deleteCache()
         chdir("..");
     }
 
+    if(!chdir(".untitled"))
+    {
+        _emptyFolder();
+        chdir("..");
+    }
+
     rmdir(".args");
     remove(".clipboard\\clipboard.clp");
     rmdir(".clipboard");
     rmdir(".output");
-    remove(".untitled\\untitled.untitled");
     rmdir(".untitled");
 
     chdir(parentDir);
@@ -872,7 +877,6 @@ void __originFileLen(char *__file_path, int *characters, int *lines, int *words,
         chdir(parentDir);
         return;
     }
-
     char newPath[512];
 
     int jp;

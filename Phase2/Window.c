@@ -21,6 +21,12 @@
 #define ISNUM(x) (x >= '0' && x <= '9')
 #define TONUM(x) (x - '0')
 #define esc_key 27
+#define DEL_KEY 127
+#define BACKSPACE 8
+#define NEWLINE '\n'
+#define STX 2  // start of text (ctrl + b)
+#define ETX 3  // end of text (ctrl + c)
+#define CAN 24 // cancel (ctrl + x)
 
 enum COLORVAL
 {
@@ -82,6 +88,7 @@ const char CUTCOM = 't';
 const char DELCOM = 'd';
 const char PSTCOM = 'p';
 const char CMDCOM = '!';
+const char EXITCOM = CAN;
 const char TO_NORMAL = esc_key;
 const char TO_INSERT[] = "INSERT";
 const char TO_VISUAL[] = "VISUAL";
@@ -1031,6 +1038,62 @@ void pasteAndHandleTilde(char *thispath, char *thatpath)
     fclose(that);
 }
 
+/// @brief Generates description
+/// @param chars
+/// @param words
+/// @param lines
+/// @param atrow cursor row
+/// @param atcol cursor col
+/// @param count number of selected chars
+/// @param state
+/// @return desc string
+char *getdesc(int chars, int words, int lines, int atrow, int atcol, int count, enum STATE state)
+{
+    char *out = calloc(512, sizeof(char));
+    strcpy(out, __itoa(chars));
+    strcat(out, chars == 1 ? " character, " : " characters, ");
+    strcat(out, __itoa(words));
+    strcat(out, words == 1 ? " word, " : " words, ");
+    strcat(out, __itoa(lines));
+    strcat(out, lines == 1 ? " line" : " lines");
+
+    if (state == VISUAL)
+    {
+        strcat(out, " | ");
+        strcat(out, __itoa(count));
+        strcat(out, count == 1 ? " selected character" : " selected characters");
+    }
+
+    if (state == INSERT)
+    {
+        strcat(out, " | Ln ");
+        strcat(out, __itoa(atrow));
+        strcat(out, ", Col ");
+        strcat(out, __itoa(atcol));
+    }
+
+    return out;
+}
+
+/// @brief Generate find description
+/// @param all
+/// @param at
+/// @return desc string
+char *getFindDesc(int all, int at)
+{
+    if (all == 0)
+    {
+        return "No matches";
+    }
+
+    char *out = calloc(512, sizeof(char));
+    strcpy(out, __itoa((at + all) % all + 1));
+    strcat(out, " of ");
+    strcat(out, __itoa(all));
+    strcat(out, all == 1 ? " match" : " matches");
+    return out;
+}
+
 /// @brief Shows a file
 /// @param path file path
 /// @param state
@@ -1060,13 +1123,7 @@ struct SCRCUR *showfile(char *path, enum STATE state)
     __originFileLen(path, &chars, &lines, &words, &maxcol);
     chdir(parentDir);
 
-    char *desc = calloc(512, sizeof(char));
-    strcpy(desc, __itoa(chars));
-    strcat(desc, " characters, ");
-    strcat(desc, __itoa(words));
-    strcat(desc, " words ");
-    strcat(desc, __itoa(lines));
-    strcat(desc, " lines");
+    char *desc = getdesc(chars, words, lines, 1, 0, 0, state);
 
     int *linesize = calloc(lines + 2, sizeof(int));
 
@@ -2169,6 +2226,40 @@ struct FINDDATATYPE *findPh2(char *__file_path, char *pat_)
     return fdt;
 }
 
+/// @brief Updates screen
+/// @param scrcur
+/// @param atrow cursor
+/// @param atcol cursor
+void updateScrcur(struct SCRCUR *scrcur, int atrow, int atcol)
+{
+    int chars, words, lines, maxcol;
+    __originFileLen(scrcur->scr->filepath, &chars, &lines, &words, &maxcol);
+    chdir(parentDir);
+    int *linesize = calloc(lines + 2, sizeof(int));
+
+    char newpath[] = "\\root\\.thisissthyoudontfuckwth.dontfuck";
+    char newpathcat[] = "/root/.thisissthyoudontfuckwth.dontfuck";
+
+    _clearOutput();
+    fclose(fopen(newpath, "w"));
+
+    pasteFileInto(untitledPathCat, newpathcat);
+
+    cat(newpathcat);
+    getlinesize(linesize);
+    _clearOutput();
+    remove(newpath);
+
+    int maxlen = (int)ceil(log10(lines + 1));
+
+    scrcur->scr->sidelen = maxlen + 1;
+    scrcur->scr->linesize = linesize;
+    scrcur->scr->maxcol = maxcol;
+    scrcur->scr->maxrow = lines + 1;
+
+    scrcur->scr->desc = getdesc(chars, words, lines, atrow, atcol, scrcur->count, scrcur->scr->state);
+}
+
 /// @brief Handles scr according to com
 /// @param scrcur current screen and cursor
 void navigateScr(struct SCRCUR *scrcur, char com)
@@ -2190,12 +2281,14 @@ void navigateScr(struct SCRCUR *scrcur, char com)
         {
             undo(scrcur->scr->filepath);
             scrcur->scr->saved = 0;
+            updateScrcur(scrcur, scrcur->cursor->Y, scrcur->cursor->X - scrcur->scr->sidelen - 1);
         }
         else if (com == PH1COM)
         {
             char *str = calloc(32768, sizeof(char));
             gets(str);
             handleColonCommands(scrcur, str, row);
+            updateScrcur(scrcur, scrcur->cursor->Y, scrcur->cursor->X - scrcur->scr->sidelen - 1);
             free(str);
         }
         else if (com == CMDCOM)
@@ -2203,6 +2296,7 @@ void navigateScr(struct SCRCUR *scrcur, char com)
             char *str = calloc(32768, sizeof(char));
             gets(str);
             handleChmodCommands(scrcur, str, row);
+            updateScrcur(scrcur, scrcur->cursor->Y, scrcur->cursor->X - scrcur->scr->sidelen - 1);
             free(str);
         }
         else if (com == FNDCOM)
@@ -2251,6 +2345,7 @@ void navigateScr(struct SCRCUR *scrcur, char com)
 
             getfinddata(fdt, ix++, &this_fix, &this_lix);
             moveCursorToIndex(scrcur, this_fix);
+            scrcur->scr->desc = getFindDesc(fdt->cnt, ix - 1);
             scrcur->hghlt = 1;
             *(scrcur->fdt) = *fdt;
             initscr(scrcur);
@@ -2259,10 +2354,12 @@ void navigateScr(struct SCRCUR *scrcur, char com)
             {
                 getfinddata(fdt, ix++, &this_fix, &this_lix);
                 moveCursorToIndex(scrcur, this_fix);
+                scrcur->scr->desc = getFindDesc(fdt->cnt, ix - 1);
                 initscr(scrcur);
             }
 
             scrcur->hghlt = 0;
+            updateScrcur(scrcur, scrcur->cursor->Y, scrcur->cursor->X - scrcur->scr->sidelen - 1);
             _deleteArgs();
             free(str);
         }
@@ -2270,6 +2367,7 @@ void navigateScr(struct SCRCUR *scrcur, char com)
         {
             _makeACopy(scrcur->scr->filepath);
             _pasteCopyInto(scrcur->scr->filepath, autoIndent(scrcur->scr->filepath));
+            updateScrcur(scrcur, scrcur->cursor->Y, scrcur->cursor->X - scrcur->scr->sidelen - 1);
         }
         else
         {
@@ -2320,6 +2418,8 @@ void navigateScr(struct SCRCUR *scrcur, char com)
 
             scrcur->scr->saved = !changed;
 
+            updateScrcur(scrcur, scrcur->cursor->Y, scrcur->cursor->X - scrcur->scr->sidelen - 1);
+
             return;
         }
         else if (com == DELCOM)
@@ -2343,19 +2443,97 @@ void navigateScr(struct SCRCUR *scrcur, char com)
 
             scrcur->scr->saved = !changed;
 
+            updateScrcur(scrcur, scrcur->cursor->Y, scrcur->cursor->X - scrcur->scr->sidelen - 1);
+
             return;
         }
     }
 
     if (scrcur->scr->state == INSERT)
     {
+        if (com == STX)
+        {
+            char *dummytxt = calloc(1, sizeof(char));
+            dummytxt[0] = getch();
+
+            while (dummytxt[0] != ETX)
+            {
+                int currow = scrcur->cursor->Y;
+                int curcol = scrcur->cursor->X - scrcur->scr->sidelen - 1;
+                int torow, tocol;
+
+                if (dummytxt[0] != BACKSPACE && dummytxt[0] != DEL_KEY)
+                {
+                    /* insert c into the file */
+                    _makeACopy(scrcur->scr->filepath);
+                    _pasteCopyInto(scrcur->scr->filepath, insertStr(scrcur->scr->filepath, dummytxt, currow, curcol));
+
+                    scrcur->scr->saved = 0;
+                    if (dummytxt[0] == NEWLINE)
+                    {
+                        torow = currow + 1;
+                        tocol = 0;
+                    }
+                    else
+                    {
+                        torow = currow;
+                        tocol = curcol + 1;
+                    }
+
+                    updateScrcur(scrcur, torow, tocol);
+                    moveCursorTo(scrcur, torow, tocol);
+                }
+                else if (dummytxt[0] == BACKSPACE)
+                {
+                    if (currow != 1 || curcol != 0)
+                    {
+                        _makeACopy(scrcur->scr->filepath);
+                        _pasteCopyInto(scrcur->scr->filepath, removeStr(scrcur->scr->filepath, currow, curcol, 1, 0));
+
+                        scrcur->scr->saved = 0;
+                        if (curcol == 0)
+                        {
+                            tocol = scrcur->scr->linesize[currow];
+                            torow = currow - 1;
+                        }
+                        else
+                        {
+                            torow = currow;
+                            tocol = curcol - 1;
+                        }
+
+                        updateScrcur(scrcur, torow, tocol);
+                        moveCursorTo(scrcur, torow, tocol);
+                    }
+                }
+                else if (dummytxt[0] == DEL_KEY)
+                {
+                    if (currow != scrcur->scr->maxrow || curcol != scrcur->scr->linesize[currow])
+                    {
+                        _makeACopy(scrcur->scr->filepath);
+                        _pasteCopyInto(scrcur->scr->filepath, removeStr(scrcur->scr->filepath, currow, curcol, 1, 1));
+
+                        scrcur->scr->saved = 0;
+
+                        updateScrcur(scrcur, torow, tocol);
+                        moveCursorTo(scrcur, torow, tocol);
+                    }
+                }
+
+                initscr(scrcur);
+                dummytxt[0] = getch();
+            }
+
+            return;
+        }
         if (com == PSTCOM)
         {
             _makeACopy(scrcur->scr->filepath);
             int changed = pasteStr(scrcur->scr->filepath, scrcur->cursor->Y, scrcur->cursor->X - scrcur->scr->sidelen - 1);
             _pasteCopyInto(scrcur->scr->filepath, changed);
-            scrcur->scr->saved = 0;
             scrcur->scr->saved = !changed;
+
+            updateScrcur(scrcur, scrcur->cursor->Y, scrcur->cursor->X - scrcur->scr->sidelen - 1);
 
             return;
         }
@@ -2471,6 +2649,13 @@ void navigateScr(struct SCRCUR *scrcur, char com)
         }
     }
 
+    // for(int i = 0; i < 5; i++)
+    // {
+    //     printf("%d\t", scrcur->scr->linesize[i]);
+    // }
+    // printf("||||");
+
+    // printf("%d|%d| %d\t", scrcur->cursor->X - scrcur->scr->sidelen - 1, scrcur->scr->linesize[scrcur->cursor->Y], scrcur->cursor->Y);
     int lnsz = scrcur->scr->linesize[scrcur->cursor->Y];
     int diff = scrcur->cursor->X - lnsz - scrcur->scr->sidelen - 1;
     if (diff > 0)
@@ -2508,6 +2693,9 @@ void navigateScr(struct SCRCUR *scrcur, char com)
         scrcur->scr->activestart = scrcur->cursor->Y;
         scrcur->scr->activeend = scrcur->cursor->Y + 1;
     }
+
+    // printf("here");
+    updateScrcur(scrcur, scrcur->cursor->Y, scrcur->cursor->X - scrcur->scr->sidelen - 1);
 }
 
 void runFile(char *path, enum STATE state)
@@ -2521,7 +2709,7 @@ void runFile(char *path, enum STATE state)
     else
         c = getch();
 
-    while (c != 'x')
+    while (c != EXITCOM)
     {
         navigateScr(scrcur, c);
         initscr(scrcur);
@@ -2534,22 +2722,7 @@ void runFile(char *path, enum STATE state)
 
 int main()
 {
-    /* VERYYYYYYY IMPORTANNNNNNNNNNTTTTTTTTTTTTTTTTTTTT */
     init();
     runFile("/root/bruh/wtf/this/is/a/test/myfile1.txt", NORMAL);
-
-    // Handler("find --str \"4* 1\" --file /root/bruh/wtf/this/is/a/test/myfile1.txt -all -byword");
-    // struct SCRCUR *scrcur = showfile("/root/bruh/wtf/this/is/a/test/myfile1.txt", VISUAL);
-    // navigateScr(scrcur->scr, scrcur->cursor, RTCOM);
-    // system("cls");
-    // navigateScr(scrcur->scr, scrcur->cursor, LTCOM);
-    // system("cls");
-    // printf("%d", scrcur->cursor->X);
-    // initscr("/root/bruh/wtf/this/is/a/test/myfile1.txt", scrcur->scr, scrcur->cursor);
-    // getch();
-
-    // system("cls");
-
-    getch();
     finish();
 }
