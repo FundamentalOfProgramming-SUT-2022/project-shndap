@@ -884,7 +884,7 @@ void initscr(struct SCRCUR *scrcur)
 
     int sl = sidebar(scrcur->scr->maxrow, scrcur->scr->startrow, scrcur->scr->endrow, rows, scrcur->scr->activestart, scrcur->scr->activeend);
 
-    int safeendcol = (scrcur->scr->endcol - scrcur->scr->startcol > cols - sl - 2 ? cols - sl - 2 : scrcur->scr->endcol);
+    int safeendcol = (scrcur->scr->endcol - scrcur->scr->startcol > scrcur->scr->startcol + cols - sl - 2 ? cols - sl - 2 : scrcur->scr->endcol);
     scrcur->scr->endcol = safeendcol;
 
     cat(scrcur->scr->filepath);
@@ -1677,15 +1677,15 @@ void moveCursorTo(struct SCRCUR *scrcur, int torow, int tocol)
     scrsize(&scrcol, &scrrow);
 
     avlrow = scrrow - 3;
-    avlcol = scrcol - scrcur->scr->sidelen - 1;
+    avlcol = scrcol - scrcur->scr->sidelen;
 
     int col_left = 0;
-    int col_right = min(avlcol, scrcur->scr->linesize[torow]);
+    int col_right = avlcol - 1;
 
-    if (tocol + 4 > avlcol)
+    if(tocol + 4 > avlcol)
     {
-        col_right = min(scrcur->scr->linesize[torow], torow + 4);
-        col_left = col_right - avlcol;
+        col_right = min(scrcur->scr->linesize[torow], tocol + 4);
+        col_left = col_right - avlcol + 1;
     }
 
     if (col_left < 0)
@@ -1705,20 +1705,20 @@ void moveCursorTo(struct SCRCUR *scrcur, int torow, int tocol)
 
     int mxrow = scrcur->scr->maxrow;
 
-    if (torow > 4 && torow <= mxrow - 4 && torow - row_up < 4)
+    if(torow > 4 && torow <= mxrow - 4 && torow - row_up < 4)
     {
         int d = abs(row_up - (torow - 4));
-        if (row_up - d > 0)
+        if(row_up - d > 0)
         {
             row_down -= d;
             row_up -= d;
         }
     }
 
-    if (torow > 4 && torow <= mxrow - 4 && row_down - torow < 4)
+    if(torow > 4 && torow <= mxrow - 4 && row_down - torow < 4)
     {
         int d = abs(row_down - (torow + 4));
-        if (row_down + d < mxrow)
+        if(row_down + d < mxrow)
         {
             row_down += d;
             row_up += d;
@@ -1727,25 +1727,25 @@ void moveCursorTo(struct SCRCUR *scrcur, int torow, int tocol)
 
     int mxcol = scrcur->scr->linesize[torow];
 
-    if (tocol > 4 && tocol <= mxcol - 4 && tocol - col_left < 4)
-    {
-        int d = abs(col_left - (tocol - 4));
-        if (col_left - d >= 0)
-        {
-            col_right -= d;
-            col_left -= d;
-        }
-    }
+    // if(tocol > 4 && tocol <= mxcol - 4 && tocol - col_left < 4)
+    // {
+    //     int d = abs(col_left - (tocol - 4));
+    //     if(col_left - d >= 0)
+    //     {
+    //         col_right -= d;
+    //         col_left -= d;
+    //     }
+    // }
 
-    if (tocol > 4 && tocol <= mxcol - 4 && col_right - tocol < 4)
-    {
-        int d = abs(col_right - (tocol + 4));
-        if (col_right + d < mxcol)
-        {
-            col_right += d;
-            col_left += d;
-        }
-    }
+    // if(tocol > 4 && tocol < mxcol - 4 && col_right - tocol < 4)
+    // {
+    //     int d = abs(col_right - (tocol + 4));
+    //     if(col_right + d < mxcol)
+    //     {
+    //         col_right += d;
+    //         col_left += d;
+    //     }
+    // }
 
     scrcur->cursor->X = tocol + scrcur->scr->sidelen + 1;
     scrcur->cursor->Y = torow;
@@ -1757,7 +1757,7 @@ void moveCursorTo(struct SCRCUR *scrcur, int torow, int tocol)
     scrcur->scr->activeend = scrcur->cursor->Y + 1;
 
     scrcur->scr->startcol = col_left;
-    scrcur->scr->endcol = col_left + avlcol;
+    scrcur->scr->endcol = col_right;
     scrcur->scr->startrow = row_up;
     scrcur->scr->endrow = row_down;
 
@@ -2364,6 +2364,7 @@ void updateScrcur(struct SCRCUR *scrcur, int atrow, int atcol)
     scrcur->scr->desc = getdesc(chars, words, lines, atrow, atcol, scrcur->count, scrcur->scr->state);
 }
 
+
 /// @brief Handles scr according to com
 /// @param scrcur current screen and cursor
 void navigateScr(struct SCRCUR *scrcur, char com)
@@ -2577,7 +2578,7 @@ void navigateScr(struct SCRCUR *scrcur, char com)
                     {
                         dummytxt[0] = NEWLINE;
                     }
-
+                    
                     _makeACopy(scrcur->scr->filepath);
                     _pasteCopyInto(scrcur->scr->filepath, insertStr(scrcur->scr->filepath, dummytxt, currow, curcol));
 
