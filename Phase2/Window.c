@@ -1679,22 +1679,72 @@ void moveCursorTo(struct SCRCUR *scrcur, int torow, int tocol)
     avlrow = scrrow - 3;
     avlcol = scrcol - scrcur->scr->sidelen - 1;
 
-    int col_left = tocol - tocol % avlcol;
-    int col_right = col_left + avlcol - 1;
+    int col_left = 0;
+    int col_right = min(avlcol, scrcur->scr->linesize[torow]);
 
-    if (col_right >= scrcur->scr->linesize[torow])
+    if (tocol + 4 > avlcol)
+    {
+        col_right = min(scrcur->scr->linesize[torow], torow + 4);
+        col_left = col_right - avlcol;
+    }
+
+    if (col_left < 0)
     {
         col_left = max(0, scrcur->scr->linesize[torow] - avlcol + 1);
         col_right = col_left + avlcol - 1;
     }
 
-    int row_up = torow - torow % avlrow;
-    int row_down = row_up + avlrow + 1;
+    int row_up = max(1, torow - 4);
+    int row_down = row_up + avlrow;
 
     if (row_down > scrcur->scr->maxrow + 1)
     {
         row_down = scrcur->scr->maxrow + 1;
-        row_up = max(0, row_down - avlrow - 1);
+        row_up = max(0, row_down - avlrow);
+    }
+
+    int mxrow = scrcur->scr->maxrow;
+
+    if (torow > 4 && torow <= mxrow - 4 && torow - row_up < 4)
+    {
+        int d = abs(row_up - (torow - 4));
+        if (row_up - d > 0)
+        {
+            row_down -= d;
+            row_up -= d;
+        }
+    }
+
+    if (torow > 4 && torow <= mxrow - 4 && row_down - torow < 4)
+    {
+        int d = abs(row_down - (torow + 4));
+        if (row_down + d < mxrow)
+        {
+            row_down += d;
+            row_up += d;
+        }
+    }
+
+    int mxcol = scrcur->scr->linesize[torow];
+
+    if (tocol > 4 && tocol <= mxcol - 4 && tocol - col_left < 4)
+    {
+        int d = abs(col_left - (tocol - 4));
+        if (col_left - d >= 0)
+        {
+            col_right -= d;
+            col_left -= d;
+        }
+    }
+
+    if (tocol > 4 && tocol <= mxcol - 4 && col_right - tocol < 4)
+    {
+        int d = abs(col_right - (tocol + 4));
+        if (col_right + d < mxcol)
+        {
+            col_right += d;
+            col_left += d;
+        }
     }
 
     scrcur->cursor->X = tocol + scrcur->scr->sidelen + 1;
@@ -1707,7 +1757,7 @@ void moveCursorTo(struct SCRCUR *scrcur, int torow, int tocol)
     scrcur->scr->activeend = scrcur->cursor->Y + 1;
 
     scrcur->scr->startcol = col_left;
-    scrcur->scr->endcol = col_right;
+    scrcur->scr->endcol = col_left + avlcol;
     scrcur->scr->startrow = row_up;
     scrcur->scr->endrow = row_down;
 
@@ -2508,6 +2558,8 @@ void navigateScr(struct SCRCUR *scrcur, char com)
     {
         if (com == STX)
         {
+            strcat(scrcur->scr->desc, " (Inserting text)");
+            initscr(scrcur);
             char *dummytxt = calloc(1, sizeof(char));
             dummytxt[0] = getch();
 
@@ -2516,6 +2568,7 @@ void navigateScr(struct SCRCUR *scrcur, char com)
                 int currow = scrcur->cursor->Y;
                 int curcol = scrcur->cursor->X - scrcur->scr->sidelen - 1;
                 int torow, tocol;
+                dummytxt[1] = '\0';
 
                 if (dummytxt[0] != BACKSPACE && dummytxt[0] != DEL_KEY)
                 {
@@ -2581,9 +2634,12 @@ void navigateScr(struct SCRCUR *scrcur, char com)
                     }
                 }
 
+                strcat(scrcur->scr->desc, " (Inserting text)");
                 initscr(scrcur);
                 dummytxt[0] = getch();
             }
+
+            updateScrcur(scrcur, scrcur->cursor->Y, scrcur->cursor->X - scrcur->scr->sidelen - 1);
 
             return;
         }
@@ -2686,14 +2742,13 @@ void navigateScr(struct SCRCUR *scrcur, char com)
         if (scrcur->cursor->X < scrcur->scr->linesize[scrcur->cursor->Y] + scrcur->scr->sidelen)
             scrcur->count++;
 
-        if (scrcur->cursor->X == scrcur->scr->maxcol + scrcur->scr->sidelen + 1)
+        if (scrcur->cursor->X == scrcur->scr->linesize[scrcur->cursor->Y] + scrcur->scr->sidelen + 1)
         {
-            /*may be incorrect*/
             return;
         }
         else if (scrcur->cursor->X - scrcur->scr->startcol - 1 >= col - 4 - scrcur->scr->sidelen)
         {
-            if (scrcur->scr->endcol < scrcur->scr->maxcol)
+            if (scrcur->scr->endcol <= scrcur->scr->linesize[scrcur->cursor->Y])
             {
                 scrcur->scr->startcol++;
                 scrcur->scr->endcol++;
