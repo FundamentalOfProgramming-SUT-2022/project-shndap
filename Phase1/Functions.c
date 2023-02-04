@@ -1506,11 +1506,12 @@ int insertStr(char *__file_path, char *text, int row, int col)
             r++;
         }
 
-        // if (row == r && col == 0)
-        // {
-        //     found = 1;
-        //     fputs(text, nfp);
-        // }
+        if (row == r && col == 0)
+        {
+            found = 1;
+            fputs("\n", nfp);
+            fputs(text, nfp);
+        }
     }
     else
     {
@@ -3075,7 +3076,7 @@ int autoIndent(char *__file_path)
     {
         while (getline(&line, &len, fp) != -1)
         {
-            if (lineisempty(line))
+            if(lineisempty(line))
                 continue;
             char *ins = malloc(1024 * sizeof(char));
             int ins_s = 0;
@@ -3195,10 +3196,10 @@ int autoIndent(char *__file_path)
     {
         while (getline(&line, &len, fp) != -1)
         {
-            if (!lineisempty(line))
+            if(!lineisempty(line))
             {
                 fputs(line, nfp);
-                if (line[strlen(line) - 1] != '\n' && line[strlen(line) - 1] != '\r')
+                if(line[strlen(line) - 1] != '\n' && line[strlen(line) - 1] != '\r')
                     fputs("\n", nfp);
             }
         }
@@ -4784,30 +4785,30 @@ void Handler(char *inp)
     _clearOutput();
 }
 
-int main()
-{
-    init();
+// int main()
+// {
+//     init();
 
-    char s[32768] = "find --str \"*a quote\" --file \"/root/this is a test filder/hi bruh.txt\"";
+//     char s[32768] = "find --str \"*a quote\" --file \"/root/this is a test filder/hi bruh.txt\"";
 
-    __boldpurple__();
-    printf(">>> ");
-    __reset__();
+//     __boldpurple__();
+//     printf(">>> ");
+//     __reset__();
 
-    gets(s);
+//     gets(s);
 
-    while (strcmp(s, "exit"))
-    {
-        Handler(s);
+//     while (strcmp(s, "exit"))
+//     {
+//         Handler(s);
 
-        __boldpurple__();
-        printf(">>> ");
-        __reset__();
+//         __boldpurple__();
+//         printf(">>> ");
+//         __reset__();
 
-        gets(s);
-    }
+//         gets(s);
+//     }
 
-    finish();
+//     finish();
 
-    return 0;
-}
+//     return 0;
+// }
