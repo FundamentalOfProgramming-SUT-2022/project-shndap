@@ -1,8 +1,7 @@
 hi this is a test 
-{{{}}} }
-
-(((()))) ) )
-]]][][][] []]]]]
+{{  int main() {int x = 7; } printf("hi")}printf("\n")}
+}
+]]]salam[][][] []]]]]
 
 "quote ! (((((()"
 wtf 

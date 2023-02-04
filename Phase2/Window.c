@@ -24,6 +24,7 @@
 #define DEL_KEY 127
 #define BACKSPACE 8
 #define NEWLINE '\n'
+#define CARRIAGERETURN '\r'
 #define STX 2  // start of text (ctrl + b)
 #define ETX 3  // end of text (ctrl + c)
 #define CAN 24 // cancel (ctrl + x)
@@ -575,7 +576,8 @@ void getlinesize(int *linesize)
 
     while (c != EOF)
     {
-        if(c == '\n'){
+        if (c == '\n')
+        {
             linesize[curline++] = curlen;
             curlen = 0;
         }
@@ -626,8 +628,10 @@ void printOutputToScr(
     COORD firstcrsr = {.X = initcursor->X, .Y = initcursor->Y};
     COORD secondcrsr = {.X = cursor->X, .Y = cursor->Y};
 
-    if (cmpCursor(&firstcrsr, &secondcrsr) == 1)
+    int firstisinit = 1;
+    if (cmpCursor(&firstcrsr, &secondcrsr) != -1)
     {
+        firstisinit = 0;
         swap(&firstcrsr, &secondcrsr);
     }
 
@@ -671,20 +675,27 @@ void printOutputToScr(
         {
             // printf("%d %d | %d %d\n", firstcrsr.X, firstcrsr.Y, X + sidelen + 1, Y);
             // getch();
-            if (cmpCursorXY(&firstcrsr, X + sidelen + 1, Y) == 1)
+            int beforefirst = (cmpCursorXY(&firstcrsr, X + sidelen + 1, Y) == 1);
+            int aftersecond = (cmpCursorXY(&secondcrsr, X + sidelen + 1, Y) != 1);
+
+            if (!firstisinit)
+            {
+                beforefirst |= !cmpCursorXY(&firstcrsr, X + sidelen + 1, Y);
+            }
+            // else
+            // {
+            //     beforefirst |= cmpCursorXY(&secondcrsr, X + sidelen + 1, Y);
+            // }
+
+            if (beforefirst || aftersecond)
             {
                 totext();
                 slct = 0;
             }
-            if (cmpCursorXY(&secondcrsr, X + sidelen + 1, Y) != -1)
+            else
             {
                 toslct();
                 slct = 1;
-            }
-            if (cmpCursorXY(&secondcrsr, X + sidelen + 1, Y) == -1)
-            {
-                totext();
-                slct = 0;
             }
         }
 
@@ -700,6 +711,10 @@ void printOutputToScr(
                 {
                     totext();
                     getfinddata(fdt, fdtix++, &fdtsix, &fdtlix);
+                    if (curix >= fdtsix && curix < fdtlix)
+                    {
+                        tohglt();
+                    }
                 }
             }
         }
@@ -1693,7 +1708,7 @@ void moveCursorTo(struct SCRCUR *scrcur, int torow, int tocol)
 
     scrcur->scr->startcol = col_left;
     scrcur->scr->endcol = col_right;
-    scrcur->scr->startrow = row_up + 1;
+    scrcur->scr->startrow = row_up;
     scrcur->scr->endrow = row_down;
 
     initscr(scrcur);
@@ -2081,6 +2096,12 @@ void handleColonCommands(struct SCRCUR *scrcur, char *str, int row)
     }
     else
     {
+        if (lineisempty(str))
+        {
+            _deleteArgs();
+            return;
+        }
+
         NoOutputHandler(str);
 
         _makeACopy("/root/.output/out.out");
@@ -2258,6 +2279,38 @@ void updateScrcur(struct SCRCUR *scrcur, int atrow, int atcol)
     scrcur->scr->maxcol = maxcol;
     scrcur->scr->maxrow = lines + 1;
 
+    int X1, X2, Y1, Y2;
+    if (cmpCursor(scrcur->cursor, scrcur->initcursor) == 1)
+    {
+        X1 = scrcur->initcursor->X - scrcur->scr->sidelen - 1;
+        X2 = scrcur->cursor->X - scrcur->scr->sidelen - 1;
+        Y1 = scrcur->initcursor->Y;
+        Y2 = scrcur->cursor->Y;
+    }
+    else
+    {
+        X2 = scrcur->initcursor->X - scrcur->scr->sidelen - 1;
+        X1 = scrcur->cursor->X - scrcur->scr->sidelen - 1;
+        Y2 = scrcur->initcursor->Y;
+        Y1 = scrcur->cursor->Y;
+    }
+
+    int cnt = 0;
+    if (Y1 == Y2)
+    {
+        cnt = X2 - X1;
+    }
+    else
+    {
+        cnt += linesize[Y1] - X1;
+        for (int i = Y1 + 1; i < Y2 - 1; i++)
+            cnt += linesize[i];
+        cnt += X2;
+        cnt += Y2 - Y1;
+    }
+
+    scrcur->count = cnt;
+
     scrcur->scr->desc = getdesc(chars, words, lines, atrow, atcol, scrcur->count, scrcur->scr->state);
 }
 
@@ -2425,6 +2478,7 @@ void navigateScr(struct SCRCUR *scrcur, char com)
         }
         else if (com == DELCOM)
         {
+
             _makeACopy(scrcur->scr->filepath);
             int changed = removeStr(scrcur->scr->filepath, firstcursor->Y, firstcursor->X - scrcur->scr->sidelen - 1, scrcur->count,
                                     SIGN(scrcur->count));
@@ -2466,6 +2520,11 @@ void navigateScr(struct SCRCUR *scrcur, char com)
                 if (dummytxt[0] != BACKSPACE && dummytxt[0] != DEL_KEY)
                 {
                     /* insert c into the file */
+                    if (dummytxt[0] == CARRIAGERETURN)
+                    {
+                        dummytxt[0] = NEWLINE;
+                    }
+
                     _makeACopy(scrcur->scr->filepath);
                     _pasteCopyInto(scrcur->scr->filepath, insertStr(scrcur->scr->filepath, dummytxt, currow, curcol));
 
@@ -2488,13 +2547,14 @@ void navigateScr(struct SCRCUR *scrcur, char com)
                 {
                     if (currow != 1 || curcol != 0)
                     {
+                        int prevlinesize = scrcur->scr->linesize[currow - 1];
                         _makeACopy(scrcur->scr->filepath);
                         _pasteCopyInto(scrcur->scr->filepath, removeStr(scrcur->scr->filepath, currow, curcol, 1, 0));
 
                         scrcur->scr->saved = 0;
                         if (curcol == 0)
                         {
-                            tocol = scrcur->scr->linesize[currow];
+                            tocol = prevlinesize;
                             torow = currow - 1;
                         }
                         else

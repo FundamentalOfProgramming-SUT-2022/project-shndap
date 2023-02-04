@@ -1506,11 +1506,12 @@ int insertStr(char *__file_path, char *text, int row, int col)
             r++;
         }
 
-        // if (row == r && col == 0)
-        // {
-        //     found = 1;
-        //     fputs(text, nfp);
-        // }
+        if (row == r && col == 0)
+        {
+            found = 1;
+            fputs("\n", nfp);
+            fputs(text, nfp);
+        }
     }
     else
     {
@@ -2971,6 +2972,21 @@ void undo(char *__file_path)
     chdir(parentDir);
 }
 
+/// @brief Checks weather a line is empty
+/// @param line
+/// @return 1 if empty
+int lineisempty(char *line)
+{
+    for (int i = 0; line[i] != '\0'; i++)
+    {
+        if (line[i] != ' ' && line[i] != '\t' && line[i] != '\n' && line[i] != '\r')
+        {
+            return 0;
+        }
+    }
+    return 1;
+}
+
 /// @brief Indents the given file
 /// @param __file_path file name
 /// @return 1 if chanegd, 0 if not
@@ -3060,6 +3076,8 @@ int autoIndent(char *__file_path)
     {
         while (getline(&line, &len, fp) != -1)
         {
+            if(lineisempty(line))
+                continue;
             char *ins = malloc(1024 * sizeof(char));
             int ins_s = 0;
             int ignorespace = 0;
@@ -3156,6 +3174,33 @@ int autoIndent(char *__file_path)
                     ins[ins_s++] = line[ii];
                     ins[ins_s] = '\0';
                 }
+            }
+        }
+    }
+
+    fclose(fp);
+    fclose(nfp);
+
+    fp = fopen(filename, "w");
+    nfp = fopen(newPath, "r");
+
+    __copy(nfp, fp);
+
+    fclose(fp);
+    fclose(nfp);
+
+    fp = fopen(filename, "r");
+    nfp = fopen(newPath, "w");
+
+    if (!__isEmpty(fp))
+    {
+        while (getline(&line, &len, fp) != -1)
+        {
+            if(!lineisempty(line))
+            {
+                fputs(line, nfp);
+                if(line[strlen(line) - 1] != '\n' && line[strlen(line) - 1] != '\r')
+                    fputs("\n", nfp);
             }
         }
     }

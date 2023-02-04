@@ -1,0 +1,36 @@
+root
+Ã 1.txt
+Ã a
+³ À b
+³   À c.txt
+Ã blah
+³ Ã j.txt
+³ À x.txt
+Ã bruh
+³ Ã dude
+³ ³ À haha
+³ ³   À man.txt
+³ À wtf
+³   À this
+³     À is
+³       À a
+³         À test
+³           Ã myfile1.txt
+³           À myfile2.txt
+Ã c
+³ À my.c
+Ã finally
+³ À s.txt
+Ã HELP
+³ Ã HELP.txt
+³ À t.txt
+Ã hi
+³ À hi.txt
+Ã out.txt
+Ã ro
+³ À b.txt
+Ã TEST
+³ Ã first.txt
+³ À second.txt
+À this is a test filder
+  À hi bruh.txt
