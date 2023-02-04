@@ -1682,7 +1682,7 @@ void moveCursorTo(struct SCRCUR *scrcur, int torow, int tocol)
     int col_left = 0;
     int col_right = avlcol - 1;
 
-    if(tocol + 4 > avlcol)
+    if (tocol + 4 > avlcol)
     {
         col_right = min(scrcur->scr->linesize[torow], tocol + 4);
         col_left = col_right - avlcol + 1;
@@ -1705,20 +1705,20 @@ void moveCursorTo(struct SCRCUR *scrcur, int torow, int tocol)
 
     int mxrow = scrcur->scr->maxrow;
 
-    if(torow > 4 && torow <= mxrow - 4 && torow - row_up < 4)
+    if (torow > 4 && torow <= mxrow - 4 && torow - row_up < 4)
     {
         int d = abs(row_up - (torow - 4));
-        if(row_up - d > 0)
+        if (row_up - d > 0)
         {
             row_down -= d;
             row_up -= d;
         }
     }
 
-    if(torow > 4 && torow <= mxrow - 4 && row_down - torow < 4)
+    if (torow > 4 && torow <= mxrow - 4 && row_down - torow < 4)
     {
         int d = abs(row_down - (torow + 4));
-        if(row_down + d < mxrow)
+        if (row_down + d < mxrow)
         {
             row_down += d;
             row_up += d;
@@ -2364,7 +2364,6 @@ void updateScrcur(struct SCRCUR *scrcur, int atrow, int atcol)
     scrcur->scr->desc = getdesc(chars, words, lines, atrow, atcol, scrcur->count, scrcur->scr->state);
 }
 
-
 /// @brief Handles scr according to com
 /// @param scrcur current screen and cursor
 void navigateScr(struct SCRCUR *scrcur, char com)
@@ -2578,7 +2577,7 @@ void navigateScr(struct SCRCUR *scrcur, char com)
                     {
                         dummytxt[0] = NEWLINE;
                     }
-                    
+
                     _makeACopy(scrcur->scr->filepath);
                     _pasteCopyInto(scrcur->scr->filepath, insertStr(scrcur->scr->filepath, dummytxt, currow, curcol));
 
