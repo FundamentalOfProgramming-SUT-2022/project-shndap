@@ -11,7 +11,7 @@ Mode manipulation commands:
 	!VISUAL	(In NORMAL mode) Switches to VISUAL
 	!INSERT	(In NORMAL mode) Switches to INSERT
 
-Cursor commands:
+Navigation commands:
 	h	Left
 	j	Down
 	k	Up
@@ -27,15 +27,15 @@ Shortcuts:
 	d		(Visual mode)	Delete
 	p		(Visual mode)	Paste
 	ctrl+b	(Insert mode)	Start of text (other shortcuts
-						and navigation buttonswill not
-						work until ctrl+c is pressed)
+							and navigation buttonswill not
+							work until ctrl+c is pressed)
 
 	ctrl+c	(Insert mode)	End of text (No text will be 
-						inserted/deleted and only 
-						shortcut or	navigation buttons
-						will work until ctrl+b is 
-						pressed)
-	
-	ctrl+x				Exit
+							inserted/deleted and only 
+							shortcut or	navigation buttons
+							will work until ctrl+b is 
+							pressed)
+								
+	ctrl+x					Exit
 
 You can also use phase 1 commands by inserting a ':' in the begginning.

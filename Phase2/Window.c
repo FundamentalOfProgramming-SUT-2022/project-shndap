@@ -575,15 +575,16 @@ void getlinesize(int *linesize)
 
     while (c != EOF)
     {
-        if (c != '\n')
-            goto current;
+        if(c == '\n'){
+            linesize[curline++] = curlen;
+            curlen = 0;
+        }
+        else
+        {
+            curlen++;
+        }
 
-        linesize[curline++] = curlen; /*problematic*/
-        curlen = 0;
-
-    current:
         c = fgetc(OUTPUT);
-        curlen++;
     }
 
     linesize[curline++] = curlen;
@@ -1125,7 +1126,7 @@ struct SCRCUR *showfile(char *path, enum STATE state)
 
     char *desc = getdesc(chars, words, lines, 1, 0, 0, state);
 
-    int *linesize = calloc(lines + 2, sizeof(int));
+    int *linesize = calloc(lines + 4, sizeof(int));
 
     _clearOutput();
     cat(path);
@@ -1179,7 +1180,7 @@ void handleChmodCommands(struct SCRCUR *scrcur, char *str, int row)
         setCursorPos(strlen(" Command Line: "), row);
         _showOutput();
 
-        sleep(1);
+        Sleep(1000);
 
         _clearOutput();
         return;
@@ -1325,7 +1326,7 @@ void printErrorInCLI(struct SCRCUR *scrcur, char *text)
     toeror();
     printf("ERROR: %s", text);
     totext();
-    sleep(1);
+    Sleep(1000);
 }
 
 /// @brief Prints Message with 1 second waiting
@@ -1342,7 +1343,7 @@ void printMessageInCLI(struct SCRCUR *scrcur, char *text)
 
     totext();
     printf("%s", text);
-    sleep(1);
+    Sleep(1000);
 }
 
 /// @brief Prints message with no wait
@@ -1574,6 +1575,7 @@ int savefile(struct SCRCUR *scrcur)
         }
         else
         {
+            return 0;
         }
 
         return 0;
@@ -1918,7 +1920,6 @@ void moveCursorToIndex(struct SCRCUR *scrcur, int ix)
 /// @param inp
 void NoOutputHandler(char *inp)
 {
-    getch();
     chdir(parentDir);
     int n = strlen(inp);
 
@@ -2046,7 +2047,7 @@ void handleColonCommands(struct SCRCUR *scrcur, char *str, int row)
         }
         else if (rtcf == 2)
         {
-            savefile(scrcur);
+            forcesave(scrcur);
             *scrcur = *showfile(arg[1], NORMAL);
         }
 
@@ -2235,9 +2236,9 @@ void updateScrcur(struct SCRCUR *scrcur, int atrow, int atcol)
     int chars, words, lines, maxcol;
     __originFileLen(scrcur->scr->filepath, &chars, &lines, &words, &maxcol);
     chdir(parentDir);
-    int *linesize = calloc(lines + 2, sizeof(int));
+    int *linesize = calloc(lines + 10, sizeof(int));
 
-    char newpath[] = "\\root\\.thisissthyoudontfuckwth.dontfuck";
+    char newpath[] = ".\\root\\.thisissthyoudontfuckwth.dontfuck";
     char newpathcat[] = "/root/.thisissthyoudontfuckwth.dontfuck";
 
     _clearOutput();
@@ -2640,6 +2641,7 @@ void navigateScr(struct SCRCUR *scrcur, char com)
             }
             else
             {
+
                 scrcur->cursor->X++;
             }
         }
@@ -2649,13 +2651,6 @@ void navigateScr(struct SCRCUR *scrcur, char com)
         }
     }
 
-    // for(int i = 0; i < 5; i++)
-    // {
-    //     printf("%d\t", scrcur->scr->linesize[i]);
-    // }
-    // printf("||||");
-
-    // printf("%d|%d| %d\t", scrcur->cursor->X - scrcur->scr->sidelen - 1, scrcur->scr->linesize[scrcur->cursor->Y], scrcur->cursor->Y);
     int lnsz = scrcur->scr->linesize[scrcur->cursor->Y];
     int diff = scrcur->cursor->X - lnsz - scrcur->scr->sidelen - 1;
     if (diff > 0)
@@ -2694,7 +2689,6 @@ void navigateScr(struct SCRCUR *scrcur, char com)
         scrcur->scr->activeend = scrcur->cursor->Y + 1;
     }
 
-    // printf("here");
     updateScrcur(scrcur, scrcur->cursor->Y, scrcur->cursor->X - scrcur->scr->sidelen - 1);
 }
 

@@ -34,11 +34,6 @@
     "**/.vscode/**"
   ],
   "files.associations": {
-    "windows.h": "c",
-    "conio.h": "c",
-    "math.h": "c",
-    "stdio.h": "c",
-    "_mingw.h": "c",
-    "unistd.h": "c"
+    "typeinfo": "c"
   }
 }
