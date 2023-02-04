@@ -1,0 +1,38 @@
+root
+~`1.txt
+~`2.txt
+~`a
+~% ~^b
+~%   ~^c.txt
+~`blah
+~% ~`j.txt
+~% ~^j.txtundo
+~`bruh
+~% ~`dude
+~% ~% ~^haha
+~% ~%   ~^man.txt
+~% ~^wtf
+~%   ~^this
+~%     ~^is
+~%       ~^a
+~%         ~^test
+~%           ~`myfile1.txt
+~%           ~^myfile2.txt
+~`c
+~% ~^my.c
+~`filewithnoquotes.txt
+~`hi
+~% ~^hi.txt
+~`ro
+~% ~`b.txt
+~% ~^b.txtundo
+~`TEST
+~% ~`first.txt
+~% ~^second.txt
+~`test with space
+~% ~^g.txt
+~`testing
+~% ~^t.txt
+~^this is a test filder
+  ~^hi bruh.txt
+bruh this is a stupid test
